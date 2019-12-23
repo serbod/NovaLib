@@ -1,39 +1,38 @@
-Бибилиотека комопнентов Nova:
+Nova components library:
 
 logger.pas          TDLogger - write messages to log file and to SysLog server
-LogFrame.pas        Интерактивный журнал событий
+LogFrame.pas        Onteractive log viewer frame
 
 MemStreams.pas      TMemoryStream with some improvements
 PJVersionInfo.pas   Version Information Component (32 bit)
-RFUtils.pas         Всякие полезнае функции ПО RF-Link v1.5
-RFFormUtils.pas     Полезные функции для форм и фреймов
-SimpleObj.pas       Простые объекты (не классы!) - блокировки, очереди, запись в файлы
-SimpleObjXE.pas     SimpleObj для DelphiXE, без AnsiString
-WeakRefs.pas        Механизм "слабых ссылок", позволяет проверять, жив ли объект или нет
-CRCUnit.pas         Расчет CRC по разным алгоритмам
-DataStorage.pas     Хранилище данных с импортом-экспортом в разные форматы
-StreamIO.pas        Делает из TStream тип TextFile, для построчного чтения
+RFUtils.pas         Useful functions
+RFFormUtils.pas     Useful functions for forms
+SimpleObj.pas       Simple thread-safe objects (not classes!) - lock, queue, file write
+SimpleObjXE.pas     SimpleObj for DelphiXE, without AnsiString
+WeakRefs.pas        Shared "weak reference", that stored actual pointer to object
+CRCUnit.pas         CRC calculation algorithms
+DataStorage.pas     Data storage with import-export to different formats
+StreamIO.pas        TStream as TextFile, for line-by-line reading
 
-HtmlHelp.pas        Определения HtmlHelp
-HtmlHelpViewer.pas  THtmlHelpViewer - класс вызова интерактивной справки
+HtmlHelp.pas        HtmlHelp declarations
+HtmlHelpViewer.pas  THtmlHelpViewer - interactive help viewer class
 
-## Функции работы с БД
-DBFunc.pas          Функции работы с БД
-SnapBaseDataset.pas
-SnapVirtualDataset.pas
-VMDataSet.pas
+## Routines for Databases
+DBFunc.pas          Functions for DB
+SnapBaseDataset.pas Base dataset for Virtual and In-memory
+SnapVirtualDataset.pas Virtual dataset, data provided in event handlers
+VMDataSet.pas       In-memory dataset
 
-## Функции работы со звуком
-MciPlay.pas         Проигрывание звуковых файлов и сэмплов из памяти через MCI
-Speech.pas          Определения для синтезатора речи
-SpeechModule.pas    TSpeechUnit - класс синтезатора речи
+## Sound and voice functions
+MciPlay.pas         Play sound from files and from memory over MCI
+Speech.pas          Speech syntheser definitions for Windows
+SpeechModule.pas    TSpeechUnit - speech syntheser
 
-## Функции работы с графикой
-colorsu.pas         Манипуляции с цветами
-ALGraphic.pas       Интерполятор - масштабирование картинок и замена цветов
-ControlsRescaler.pas автоматизатор масштабирования контролов
+## Graphics functions
+colorsu.pas         Colors manipulations
+ALGraphic.pas       Interpolator - pictures scaling and colors replacement
+ControlsRescaler.pas Controls rescaler and layouter
 
-## Системные библиотеки
-VCLFixPack.pas      Исправление багов VCL
-uDisableGhosting.pas Отключает в WinXP и выше механизм Window Ghosting
-
+## System libraries
+VCLFixPack.pas      VCL bugfix pack
+uDisableGhosting.pas Disable Window Ghosting in WinXP and higher
