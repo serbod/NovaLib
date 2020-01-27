@@ -11,11 +11,18 @@ SimpleObj.pas       Simple thread-safe objects (not classes!) - lock, queue, fil
 SimpleObjXE.pas     SimpleObj for DelphiXE, without AnsiString
 WeakRefs.pas        Shared "weak reference", that stored actual pointer to object
 CRCUnit.pas         CRC calculation algorithms
-DataStorage.pas     Data storage with import-export to different formats
 StreamIO.pas        TStream as TextFile, for line-by-line reading
 
 HtmlHelp.pas        HtmlHelp declarations
 HtmlHelpViewer.pas  THtmlHelpViewer - interactive help viewer class
+
+## Routines for data serialization ##
+VarLists.pas        Variant List, can store multiple values.
+VarDicts.pas        Variant Dictionary, can store values in named fields.
+VarSerializeBase.pas Base routines for Variant serialization
+BencodeUnit.pas     Variant <-> Bencode serialization
+JsonUnit.pas        Variant <-> JSON serialization
+DataStorage.pas     Data storage with import-export to different formats
 
 ## Routines for Databases
 DBFunc.pas          Functions for DB

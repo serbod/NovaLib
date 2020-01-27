@@ -1,5 +1,5 @@
 unit DataStorage;
-{ Author: Sergey Bodrov (serbod@gmail.com) 2010-2016 }
+{ Author: Sergey Bodrov (serbod@gmail.com) 2010-2020 }
 
 {$ifdef FPC}
 {$mode objfpc}{$H+}

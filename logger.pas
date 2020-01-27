@@ -593,7 +593,7 @@ procedure TDLogger.InternalSendToSyslog(ll: TLogLevel; const sMsg: string; dt: T
 var
   //Sock: TUDPBlockSocket;
   rec: TLogRecord;
-  s: AnsiString;
+  s: string;
 {$endif}
 begin
   {$ifdef SYNAPSE}
@@ -618,7 +618,7 @@ begin
 
   try
     LogRecToSyslogStr(rec, s);
-    FSock.SendString(s);
+    FSock.SendString(AnsiString(s));
   except
     FreeAndNil(FSock);
   end;
