@@ -65,6 +65,20 @@ implementation
 
 uses RFUtils;
 
+{$ifndef FPC}
+function GetKeyShiftState(): TShiftState;
+begin
+  Result := [];
+  if GetKeyState(VK_CONTROL) < 0 then
+    Include(Result, ssCtrl);
+  if GetKeyState(VK_SHIFT) < 0 then
+    Include(Result, ssShift);
+  if GetKeyState(VK_MENU) < 0 then
+    Include(Result, ssAlt);
+  //if (GetKeyState(VK_LWIN) < 0) or (GetKeyState(VK_RWIN) < 0) then
+  //  Include(Result, ssMeta);
+end;
+{$endif FPC}
 
 // вызов справки
 procedure ShowHelp();

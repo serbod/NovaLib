@@ -44,7 +44,34 @@ type
     function VariantFromFile(AFileName: string): Variant; override;
   end;
 
+  function VariantToFileBencode(const AValue: Variant; AFileName: string): Boolean;
+  function VariantFromFileBencode(AFileName: string): Variant;
+
 implementation
+
+function VariantToFileBencode(const AValue: Variant; AFileName: string): Boolean;
+var
+  ser: TVariantSerializerBencode;
+begin
+  ser := TVariantSerializerBencode.Create();
+  try
+    Result := ser.VariantToFile(AValue, AFileName);
+  finally
+    ser.Free();
+  end;
+end;
+
+function VariantFromFileBencode(AFileName: string): Variant;
+var
+  ser: TVariantSerializerBencode;
+begin
+  ser := TVariantSerializerBencode.Create();
+  try
+    Result := ser.VariantFromFile(AFileName);
+  finally
+    ser.Free();
+  end;
+end;
 
 { TVariantSerializerBencode }
 
@@ -115,17 +142,17 @@ end;
 function TVariantSerializerBencode.VariantToStream(const AStorage: Variant;
   AStream: TStream): Boolean;
 
-procedure WriteStr(const AStr: RawByteString);
+procedure WriteStr(const AStr: UTF8String);
 begin
   if Length(AStr) > 0 then
     AStream.Write(AStr[1], Length(AStr));
 end;
 
 var
-  sName: RawByteString;
+  sName: string;
   SubItem: Variant;
   i: integer;
-  s: RawByteString;
+  s: string;
 begin
   if VarIsOrdinal(AStorage) then
   begin

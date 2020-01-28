@@ -46,9 +46,34 @@ type
     function VariantFromFile(AFileName: string): Variant; override;
   end;
 
+  function VariantToFileJson(const AValue: Variant; AFileName: string): Boolean;
+  function VariantFromFileJson(AFileName: string): Variant;
+
 implementation
 
-uses Classes;
+function VariantToFileJson(const AValue: Variant; AFileName: string): Boolean;
+var
+  ser: TVariantSerializerJson;
+begin
+  ser := TVariantSerializerJson.Create();
+  try
+    Result := ser.VariantToFile(AValue, AFileName);
+  finally
+    ser.Free();
+  end;
+end;
+
+function VariantFromFileJson(AFileName: string): Variant;
+var
+  ser: TVariantSerializerJson;
+begin
+  ser := TVariantSerializerJson.Create();
+  try
+    Result := ser.VariantFromFile(AFileName);
+  finally
+    ser.Free();
+  end;
+end;
 
 { TVariantSerializerJson }
 

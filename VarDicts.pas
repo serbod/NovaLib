@@ -306,7 +306,7 @@ end;
 
 procedure TVarDictType.VarDerefAndCopy(const V: TVarData);
 begin
-//
+// todo: write-on-copy
 end;
 
 initialization

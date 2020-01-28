@@ -1,7 +1,7 @@
 Nova components library:
 
 logger.pas          TDLogger - write messages to log file and to SysLog server
-LogFrame.pas        Onteractive log viewer frame
+LogFrame.pas        Interactive log viewer frame
 
 MemStreams.pas      TMemoryStream with some improvements
 PJVersionInfo.pas   Version Information Component (32 bit)

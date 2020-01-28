@@ -15,7 +15,9 @@ Methods:
   AddValue(Value) - add value to end of list. Capacity increased if needed
   GetCount() - get stored items count
   GetValue(Index) - get item value for given index (0..GetCount()-1)
-  SetValue(Index, Value) - get item value for given index (0..GetCount()-1)
+  SetValue(Index, Value) - set item value for given index (0..GetCount()-1)
+
+Note: '+' operator can't be used because it require conversion of right-side operand to same type
 
 *)
 unit VarLists;
@@ -26,6 +28,7 @@ uses Variants;
 
 type
   TVarListType = class(TInvokeableVariantType)
+  public
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
     procedure Clear(var V: TVarData); override;
@@ -33,7 +36,7 @@ type
     function DoFunction(var Dest: TVarData; const V: TVarData;
       const Name: string; const Arguments: TVarDataArray): Boolean; override;
     function DoProcedure(const V: TVarData; const Name: string;
-      const Arguments: TVarDataArray): Boolean; virtual;
+      const Arguments: TVarDataArray): Boolean; override;
   end;
 
   function VarListCreate(): Variant;
@@ -132,7 +135,14 @@ end;
 procedure TVarListType.Copy(var Dest: TVarData;
   const Source: TVarData; const Indirect: Boolean);
 begin
-  TVarListData(Source).VList.CopyTo(TVarListData(Dest).VList);
+  if Indirect and VarDataIsByRef(Source) then
+    VarDataCopyNoInd(Dest, Source)
+  else
+  begin
+    TVarListData(Dest).VType := VarType;
+    TVarListData(Dest).VList := TVariantList.Create();
+    TVarListData(Source).VList.CopyTo(TVarListData(Dest).VList)
+  end;
 end;
 
 function TVarListType.DoFunction(var Dest: TVarData;
@@ -178,8 +188,9 @@ begin
     // SetCapacity(MaxCount)
     TVarListData(V).VList.SetCapacity(Variant(Arguments[0]));
     Result := True;
-  end;
-
+  end
+  else
+    Result := False;
 end;
 
 { TVariantList }
