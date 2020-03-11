@@ -1,6 +1,10 @@
-unit VMDataSet;
+{ Virtual memory DataSet, readed from TStream
+  for using with DatasetToStream() from DBFunc.pas
 
-{ Virtual memory DataSet }
+ (C) Sergey Bodrov (serbod@gmail.com)
+ MIT license }
+
+unit VMDataSet;
 
 interface
 uses

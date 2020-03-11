@@ -274,7 +274,7 @@ begin
   for i := 0 to ExceptionLogLines.Count-1 do
   begin
     _Log(ExceptionLogLines[i], llError);
-    if i > 3 then
+    if i > 9 then
       Break;
   end;
   ExceptionLogLines.Clear();
@@ -494,7 +494,8 @@ begin
     end;
   end;
   s := FormatDateTime(TimestampFormat, dt)+' '+LLToStr(ll)+' '+sMsg+sLineBreak;
-  FileWrite(fh, PChar(s)^, Length(s));
+  if s <> '' then
+    FileWrite(fh, s[1], Length(s));
   //Flush(f); // forced flush data from buffer to file
   inc(n);
   if n > 10 then

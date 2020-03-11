@@ -1,5 +1,5 @@
 {-----------------------------------------------------------------------------
-Всякие полезнае функции
+Всякие полезные функции
 
 (C) Sergey Bodrov (serbod@gmail.com)
 MIT license
@@ -139,9 +139,9 @@ procedure DeleteFileCount(const Dir, Mask: string; N: Integer);
 
 {$ifdef WIN_NATIVE}
 // версия файла
-function GetFileVersion(const AFileName: string; var VersionMS, VersionLS: Cardinal): Cardinal;
+function GetFileVersion(const AFileName: string; var VersionMS, VersionLS: LongWord): LongWord;
 // версия программы/DLL
-function GetAppVersion(): Cardinal;
+function GetAppVersion(): LongWord;
 {$endif}
 
 implementation
@@ -163,15 +163,17 @@ procedure WriteAnsiStringToStream(Stream: TStream; const Str: AnsiString);
 var
   Len: Cardinal;
 begin
+  Assert(Assigned(Stream));
   Len := Length(Str);
   Stream.WriteBuffer(Len, SizeOf(Len));
-  Stream.WriteBuffer(PChar(Str)^, Len);
+  if Len > 0 then
+    Stream.WriteBuffer(Str[1], Len);
 end;
 
 // чтение строки байтов из потока (TStream)
 function ReadAnsiStringFromStream(Stream: TStream; var Str: AnsiString): Boolean;
 var
-  Len: Cardinal;
+  Len: LongWord;
 begin
   if (Stream.Size - Stream.Position) >= SizeOf(Len) then
     Stream.ReadBuffer(Len, SizeOf(Len))
@@ -180,7 +182,7 @@ begin
   SetLength(Str, Len);
   Result := (Len > 0);
   if Result then
-    Stream.ReadBuffer(PChar(Str)^, Len);
+    Stream.ReadBuffer(Str[1], Len);
 end;
 
 function GetAnsiStringFromStream(Stream: TStream): AnsiString;
@@ -1031,10 +1033,10 @@ type
   {$EXTERNALSYM VS_FIXEDFILEINFO}
   VS_FIXEDFILEINFO = tagVS_FIXEDFILEINFO;
 
-function GetFileVersion(const AFileName: string; var VersionMS, VersionLS: Cardinal): Cardinal;
+function GetFileVersion(const AFileName: string; var VersionMS, VersionLS: LongWord): LongWord;
 var
   FileName: string;
-  InfoSize, Wnd: Cardinal;
+  InfoSize, Wnd: LongWord;
   VerBuf: Pointer;
   FI: PVSFixedFileInfo;
   VerSize: DWORD;
@@ -1062,10 +1064,10 @@ begin
 end;
 
 // версия программы/DLL
-function GetAppVersion: Cardinal;
+function GetAppVersion: LongWord;
 var
   ModuleFileName: array [0..MAX_PATH] of Char;
-  VersionMS, VersionLS: Cardinal;
+  VersionMS, VersionLS: LongWord;
 begin
   GetModuleFileName(HInstance, ModuleFileName, MAX_PATH);
   GetFileVersion(ModuleFileName, VersionMS, VersionLS);

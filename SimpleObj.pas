@@ -79,7 +79,7 @@ type
     function Find(const Key: string): PSimpleHashItem;
     function HashOf(const Key: string): Cardinal;
   public
-    procedure Init(Size: Cardinal = 256);
+    procedure Init(Size: Integer = 256);
     procedure Add(const Key: string; Value: Integer);
     procedure Clear;
     function Modify(const Key: string; Value: Integer): Boolean;
@@ -346,12 +346,14 @@ begin
     Result := ((Result shl 2) or (Result shr (SizeOf(Result) * 8 - 2))) xor Ord(Key[I]);
 end;
 
-procedure TSimpleStringHash.Init(Size: Cardinal);
+procedure TSimpleStringHash.Init(Size: Integer);
 var
   i: Integer;
 begin
   if Length(Buckets) > 0 then
     Clear();
+  if Size < 0 then
+    Size := 0;
   SetLength(Buckets, Size);
   for i := 0 to Size-1 do
     Buckets[i] := nil;

@@ -548,7 +548,7 @@ begin
   if FLength > Size then
     FLength := Size;
   if FLength > 0 then
-    System.Move(PChar(Value)^, FMemory^, FLength);
+    System.Move(Value[1], FMemory^, FLength);
 end;
 
 function TMemString.Copy(Index, Count: Integer): string;
@@ -572,7 +572,7 @@ begin
     {$ELSE}
     p := Ptr(Integer(FMemory) + Index);
     {$ENDIF}
-    System.Move(p^, PChar(Result)^, Count);
+    System.Move(p^, Result[1], Count);
   end;
 end;
 
@@ -598,7 +598,7 @@ begin
     {$ELSE}
     p := Ptr(Integer(FMemory) + Index);
     {$ENDIF}
-    System.Move(p^, PChar(AStr)^, Count);
+    System.Move(p^, AStr[1], Count);
     Result := True;
   end
   else

@@ -1,5 +1,7 @@
 (*
 Variant Dictionary (C) Sergey Bodrov 2020
+Auto-sorted by names, binary search used to get value by name
+
 MIT License
 
 Usage:
@@ -45,6 +47,8 @@ type
 
 implementation
 
+uses SysUtils;
+
 type
   TVariantDictionaryItem = record
     Name: string;
@@ -60,8 +64,10 @@ type
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
 
-    function GetNameIndex(const AName: string): Integer;
-    function AddItem(const AName: string): Integer;
+    { if >= 0 then index of found name
+      if < 0 then 1-based index for name (can be > Count)
+      IsAddItem - add named item }
+    function GetNameIndex(const AName: string; IsAddItem: Boolean = False): Integer;
 
     function GetCount(): Integer;
     function AsString(): string;
@@ -201,12 +207,7 @@ begin
   if (TVarData(V).VType and varByRef) <> 0 then
     VarDerefAndCopy(V);
 
-  i := TVarDictData(V).VDict.GetNameIndex(Name);
-  if i = -1 then
-  begin
-    i := TVarDictData(V).VDict.AddItem(Name);
-    VariantInit(TVarDictData(V).VDict.Items[i].Value);
-  end;
+  i := TVarDictData(V).VDict.GetNameIndex(Name, True);
   //VarDataCopy(TVarDictData(V).VDict.Items[i].Value, Value);
   VariantCopy(TVarDictData(V).VDict.Items[i].Value, Value);
 end;
@@ -266,42 +267,63 @@ begin
   Result := ItemsCount;
 end;
 
-function TVariantDictionary.GetNameIndex(const AName: string): Integer;
+function TVariantDictionary.GetNameIndex(const AName: string; IsAddItem: Boolean): Integer;
 var
-  i: Integer;
+  i, iCompResult, iL, iR, iM: Integer;
 begin
-  for i := 0 to ItemsCount-1 do
+  // binary search
+  Result := -1;
+  iL := 0;
+  iR := ItemsCount-1;
+  while iL <= iR do
   begin
-    if Items[i].Name = AName then
+    iM := (iL + iR) div 2;
+    iCompResult := CompareText(AName, Items[iM].Name);
+    if iCompResult > 0 then
     begin
-      Result := i;
-      Exit;
+      iL := iM + 1;
+      Result := -(iM + 2);
+    end
+    else
+    if iCompResult < 0 then
+    begin
+      iR := iM - 1;
+      Result := -(iM + 1);
+    end
+    else
+    begin
+      Result := iM;
+      Break;
     end;
   end;
-  Result := -1;
-end;
 
-function TVariantDictionary.AddItem(const AName: string): Integer;
-begin
-  Result := ItemsCount;
-  Inc(ItemsCount);
-  SetLength(Items, ItemsCount);
-  Items[Result].Name := AName;
-  //VarClear(Items[Result].Value);
-end;
+  // insert name if needed
+  if (Result < 0) and IsAddItem then
+  begin
+    Result := -Result - 1;
+    Inc(ItemsCount);
+    SetLength(Items, ItemsCount);
+    // shift elements
+    for i := ItemsCount-1 downto Result + 1 do
+      Items[i] := Items[i-1];
 
+    Items[Result].Name := AName;
+    VariantInit(Items[Result].Value);
+  end;
+end;
 
 function TVariantDictionary.AsString: string;
 var
   i: Integer;
 begin
-  Result := '';
+  Result := '{';
   for i := 0 to ItemsCount-1 do
   begin
-    if Result <> '' then
+    if i > 0 then
       Result := Result + ',';
-    Result := Result + Items[i].Name;
+    Result := Result + Items[i].Name + ':' + VarToStr(Variant(Items[i].Value));
   end;
+  Result := Result + '}';
 end;
 
 procedure TVarDictType.VarDerefAndCopy(const V: TVarData);

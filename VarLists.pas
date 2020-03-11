@@ -213,13 +213,14 @@ function TVariantList.AsString: string;
 var
   i: Integer;
 begin
-  Result := '';
+  Result := '[';
   for i := 0 to FItemsCount-1 do
   begin
-    if Result <> '' then
+    if i > 0 then
       Result := Result + ',';
     Result := Result + VarToStr(Variant(Items[i]));
   end;
+  Result := Result + ']';
 end;
 
 procedure TVariantList.BeforeDestruction;
