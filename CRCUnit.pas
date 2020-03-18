@@ -94,10 +94,15 @@ CRC32_JAMCRC        $04C11DB7, $FFFFFFFF, $00000000, True
 CRC32_XFER          $000000AF, $00000000, $00000000, False
 }
 
-{ Возвращает CRC32 по стандарту IEEE 802.3 }
-function GetCRC32(BufPtr: PByte; Len: Integer; InitCRC: LongWord = $FFFFFFFF): LongWord;
-{ Инвертированный CRC32, для контроллеров STM32. Внимание! Len должен быть кратным 4 }
-function GetCRC32Reverse(BufPtr: PLongWord; Len: Integer; InitCRC: LongWord = $FFFFFFFF): LongWord;
+{ Calculate CRC32 lookup table }
+procedure CRC32Init(APoly: LongWord = $04C11DB7; AReflect: Boolean = True);
+{ Returns CRC32 by IEEE 802.3 standard }
+function GetCRC32Fast(ABufPtr: PByte; ALen: Integer;
+  AInitCRC: LongWord = $FFFFFFFF; AFinal: LongWord = $FFFFFFFF): LongWord;
+
+{ CRC32, for STM32 controllers. Attention! Len must be a multiple of 4
+  It named Reverse by mistake, in legacy code }
+function GetCRC32Reverse(ABufPtr: PLongWord; ALen: Integer; AInitCRC: LongWord = $FFFFFFFF): LongWord;
 
 
 
@@ -113,28 +118,39 @@ begin
   Result := N[B div 16] or N[B mod 16] shl 4;
 end;
 
-function GetCRC32(BufPtr: PByte; Len: Integer; InitCRC: LongWord): LongWord;
+function BitFlipLongWord(A: LongWord): LongWord;
+begin
+  A := ((A shl 16) and $FFFF0000) or ((A shr 16) and $0000FFFF);
+  A := ((A shl 08) and $FF00FF00) or ((A shr 08) and $00FF00FF);
+  A := ((A shl 04) and $F0F0F0F0) or ((A shr 04) and $0F0F0F0F);
+  A := ((A shl 02) and $CCCCCCCC) or ((A shr 02) and $33333333);
+  A := ((A shl 01) and $AAAAAAAA) or ((A shr 01) and $55555555);
+  Result := A;
+end;
+
+function GetCRC32Fast(ABufPtr: PByte; ALen: Integer;
+  AInitCRC: LongWord; AFinal: LongWord): LongWord;
 var
   i: Integer;
 begin
-  Result := InitCRC;
-  for i := 0 to Len - 1 do
+  Result := AInitCRC;
+  for i := 0 to ALen - 1 do
   begin
-    Result := (Result shr 8) xor CRC32Table[Byte(Result) xor BufPtr^];
-    Inc(BufPtr);
+    Result := (Result shr 8) xor CRC32Table[Byte(Result) xor ABufPtr^];
+    Inc(ABufPtr);
   end;
-  Result := Result xor $FFFFFFFF;
+  Result := Result xor AFinal;
 end;
 
-function GetCRC32Reverse(BufPtr: PLongWord; Len: Integer; InitCRC: LongWord): LongWord;
+function GetCRC32Reverse(ABufPtr: PLongWord; ALen: Integer; AInitCRC: LongWord): LongWord;
 var
   i, j: Integer;
 begin
-  Result := InitCRC;
+  Result := AInitCRC;
   i := 0;
   repeat
-    Result := Result xor BufPtr^;
-    Inc(BufPtr);
+    Result := Result xor ABufPtr^;
+    Inc(ABufPtr);
     for j := 1 to 32 do
     begin
       if (Result and $80000000) <> 0 then
@@ -143,25 +159,45 @@ begin
         Result := (Result shl 1);
     end;
     Inc(i, 4);
-  until i >= Len;
+  until i >= ALen;
 end;
 
-procedure CRCInit();
+procedure CRC32Init(APoly: LongWord; AReflect: Boolean);
 var
   c: LongWord;
-  i, j: integer;
+  i, ii: integer;
 begin
-  for i := Low(Byte) to High(Byte) do
+  if AReflect then
   begin
-    c := i;
-    for j := 1 to 8 do
+    APoly := BitFlipLongWord(APoly);
+    for i := Low(Byte) to High(Byte) do
     begin
-      if (c and $1) <> 0 then
-        c := (c shr 1) xor $EDB88320
-      else
-        c := (c shr 1);
+      c := i;
+      for ii := 1 to 8 do
+      begin
+        if (c and $1) <> 0 then
+          c := (c shr 1) xor APoly
+        else
+          c := (c shr 1);
+      end;
+      CRC32Table[i] := c;
     end;
-    CRC32Table[i] := c;
+  end
+  else
+  begin
+    for i := Low(Byte) to High(Byte) do
+    begin
+      c := LongWord(i) shl 8;
+      for ii := 1 to 8 do
+      begin
+        if (c and $80000000) <> 0 then
+          c := (c shl 1) xor APoly
+        else
+          c := (c shl 1);
+      end;
+      CRC32Table[i] := c;
+    end;
+
   end;
 end;
 
@@ -364,5 +400,5 @@ end;
 
 
 initialization
-  CRCinit();
+  CRC32Init();
 end.
