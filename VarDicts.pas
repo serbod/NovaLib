@@ -13,8 +13,9 @@ MyDict.Field2 := 'test';
 
 Methods:
   GetCount() - get stored items count
-  GetValue(Index) - get item value for given index (0..GetCount()-1)
-  GetName(Index) - get item name for given index (0..GetCount()-1)
+  GetValue(Index) - get item value for given Index (0..GetCount()-1)
+  GetName(Index) - get item name for given Index (0..GetCount()-1)
+  GetNameIndex(Name) - get index of item Name, or <0 if Name not found
 
 *)
 unit VarDicts;
@@ -167,8 +168,13 @@ begin
       VarDataFromStr(Dest, TVarDictData(V).VDict.Items[i].Name);
       Result := True;
     end;
+  end
+  else
+  if (Name = 'GETNAMEINDEX') and (Length(Arguments) = 1) then
+  begin
+    Variant(Dest) := TVarDictData(V).VDict.GetNameIndex(Variant(Arguments[0]));
+    Result := True;
   end;
-
 end;
 
 function TVarDictType.DoProcedure(const V: TVarData; const Name: string;

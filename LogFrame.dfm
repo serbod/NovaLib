@@ -6,14 +6,16 @@ object FrameLog: TFrameLog
   ClientHeight = 332
   ClientWidth = 673
   TabOrder = 0
+  DesignLeft = 439
+  DesignTop = 281
   object panLogFilter: TPanel
     Left = 0
-    Height = 25
+    Height = 29
     Top = 0
     Width = 673
     Align = alTop
     BevelOuter = bvNone
-    ClientHeight = 25
+    ClientHeight = 29
     ClientWidth = 673
     TabOrder = 0
     object lbLogFilterText: TLabel
@@ -38,7 +40,7 @@ object FrameLog: TFrameLog
     end
     object btnPause: TSpeedButton
       Left = 644
-      Height = 20
+      Height = 22
       Top = 2
       Width = 20
       Action = actFreezeLog
@@ -48,7 +50,7 @@ object FrameLog: TFrameLog
       ParentShowHint = False
     end
     object edLogFilter: TEdit
-      Left = 56
+      Left = 64
       Height = 23
       Top = 2
       Width = 205
@@ -68,7 +70,7 @@ object FrameLog: TFrameLog
     end
     object btnLogFilterClear: TButton
       Left = 572
-      Height = 20
+      Height = 22
       Top = 2
       Width = 61
       Anchors = [akTop, akRight]
@@ -80,9 +82,9 @@ object FrameLog: TFrameLog
   end
   object lvLog: TListView
     Left = 0
-    Height = 307
+    Height = 303
     Hint = 'Двойной щелчок - приостановить прокрутку'
-    Top = 25
+    Top = 29
     Width = 673
     Align = alClient
     Columns = <    
@@ -109,8 +111,8 @@ object FrameLog: TFrameLog
   end
   object alLog: TActionList
     Images = imgListLog
-    Left = 200
-    Top = 96
+    left = 200
+    top = 96
     object actFreezeLog: TAction
       Caption = 'Остановить прокрутку'
       Hint = 'Остановить/возобновить автопрокрутку событий в журнале'
@@ -140,8 +142,8 @@ object FrameLog: TFrameLog
   end
   object pmLog: TPopupMenu
     Images = imgListLog
-    Left = 264
-    Top = 96
+    left = 264
+    top = 96
     object mniFreezeLog: TMenuItem
       Action = actFreezeLog
     end
@@ -162,8 +164,8 @@ object FrameLog: TFrameLog
     end
   end
   object imgListLog: TImageList
-    Left = 264
-    Top = 164
+    left = 264
+    top = 164
     Bitmap = {
       4C69020000001000000010000000000000000000000000000000000000000000
       0000000000000000000000000000000000000000000000000000000000000000

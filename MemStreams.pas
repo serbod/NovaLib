@@ -1,15 +1,35 @@
 {
-TMemoryStream with some improvements
+TMemStream
+  TMemoryStream replacement with some improvements
+
+  MEM_DEFAULT mode - same as TMemoryStream
+  MEM_GLOBAL mode - can allocate memory outside default 2 Gb (for 32 bit)
+  MEM_MSVCRT mode - use msvcrt.dll, with latest updates and fixes
+  MEM_STRING mode - use AnsiString for memory buffer
+
+TMemString
+  TMemStream with some String methods (Pos, Copy, Delete..)
+
+TTmpFileStream
+  temporary file, that stays in memory, but swapped to disk when no free memory
 
 Sergey Bodrov (serbod@gmail.com) 2016
 }
 unit MemStreams;
 
 // memory allocation mode
-{$define MEM_DEFAULT}   // default  GetMem/ReallocMem/FreeMem
-{// $define MEM_GLOBAL}  // GlobalAlloc  GlobalAllocPtr/GlobalReallocPtr/GlobalFreePtr
-{// $define MEM_MSVCRT}  // msvcrt.dll  win_malloc/win_realloc/win_free
-{// $define MEM_STRING}  // AnsiString
+{$ifdef ANDROID}
+  {$define MEM_DEFAULT}   // default  GetMem/ReallocMem/FreeMem
+{$else}
+  {$ifdef CPU64}
+    {$define MEM_DEFAULT}  // default  GetMem/ReallocMem/FreeMem
+  {$else}
+    {// $define MEM_DEFAULT}  // default  GetMem/ReallocMem/FreeMem
+    {$define MEM_GLOBAL}  // GlobalAlloc  GlobalAllocPtr/GlobalReallocPtr/GlobalFreePtr
+  {$endif}
+  {// $define MEM_MSVCRT}  // msvcrt.dll  win_malloc/win_realloc/win_free
+  {// $define MEM_STRING}  // AnsiString as memory buffer
+{$endif}
 
 interface
 
@@ -266,7 +286,7 @@ begin
   if OldPosition > NewSize then Seek(0, soFromEnd);
 end;
 
-{$ifdef ANDROID}
+{$ifdef MEM_DEFAULT}
 function TMemStream.Realloc(var NewCapacity: Longint): Pointer;
 begin
   Result := Memory;
@@ -286,8 +306,9 @@ begin
     end;
   end;
 end;
-{$else}
+{$endif}
 
+{$ifdef MEM_GLOBAL}
 function TMemStream.Realloc(var NewCapacity: Longint): Pointer;
 begin
   Result := Memory;
@@ -299,16 +320,26 @@ begin
       Result := nil;
     end else
     begin
+      // HeapAllocFlags = GMEM_MOVEABLE
+      // GMEM_MOVEABLE - working, but useless for GlobalAllocPtr / GlobalReallocPtr
+      // GMEM_FIXED - handle = pointer, but not working sometimes
       if Capacity = 0 then
-        Result := GlobalAllocPtr(GMEM_MOVEABLE, NewCapacity)  // HeapAllocFlags = GMEM_MOVEABLE
+      begin
+        Result := GlobalAllocPtr(GMEM_MOVEABLE, NewCapacity);
+        if Result = nil then
+          raise EStreamError.Create('GlobalAllocPtr(' + IntToStr(NewCapacity) + ')=nil');
+      end
       else
+      begin
         Result := GlobalReallocPtr(Memory, NewCapacity, GMEM_MOVEABLE);
-      if Result = nil then raise EStreamError.Create('Out of memory while expanding memory stream');
+        if Result = nil then
+          raise EStreamError.Create('GlobalReallocPtr(' + IntToStr(NewCapacity) + ')=nil');
+      end;
     end;
   end;
 end;
 {$endif}
-(*
+
 {$ifdef MEM_MSVCRT}
 function TMemStream.Realloc(var NewCapacity: Longint): Pointer;
 begin
@@ -330,8 +361,8 @@ begin
   end;
 end;
 {$endif}
-*)
-{
+
+{$ifdef MEM_STRING}
 function TMemStream.Realloc(var NewCapacity: Longint): Pointer;
 begin
   if NewCapacity <> FCapacity then
@@ -343,7 +374,7 @@ begin
   else
     Result := nil;
 end;
-}
+{$endif}
 
 function TMemStream.Write(const Buffer; Count: Longint): Longint;
 var

@@ -144,6 +144,9 @@ function GetFileVersion(const AFileName: string; var VersionMS, VersionLS: LongW
 function GetAppVersion(): LongWord;
 {$endif}
 
+var
+  RFFormatSettings: TFormatSettings;
+
 implementation
 
 {$IFDEF TRANSCODE_STRINGS}
@@ -815,7 +818,7 @@ begin
   NextRaise := RaiseList();
   while NextRaise <> nil do
   begin
-    E := Exception(NextRaise);
+    E := Exception(NextRaise^.FObject);
     if Result <> '' then
       Result := Result + '; ';
     if Assigned(E) then
@@ -1086,6 +1089,14 @@ TickCount64Base := 0;
 {$ifdef ANDROID}
 CP1251Encoding := TMBCSEncoding.Create(1251);
 {$endif}
+
+//GetFormatSettings(GetThrea, RFFormatSettings);
+RFFormatSettings.DecimalSeparator := '.';
+RFFormatSettings.ThousandSeparator := '_';
+RFFormatSettings.DateSeparator := '.';
+RFFormatSettings.TimeSeparator := ':';
+RFFormatSettings.ShortDateFormat := 'yyyy.mm.dd';
+RFFormatSettings.ShortTimeFormat := 'hh:nn:ss';
 
 {$ifndef FPC}
   {$ifdef MSWINDOWS}

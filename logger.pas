@@ -243,14 +243,24 @@ begin
   while NextRaise <> nil do
   begin
     E := Exception(PRaiseFrame(NextRaise)^.ExceptObject);
-    if E = nil then
+    if E <> nil then
+    begin
+      if Result <> '' then
+        Result := Result + '; ';
+      {$ifdef FPC}
+      Result := Result + E.ClassName+'($' + IntToHex(PtrUInt(PRaiseFrame(NextRaise)^.ExceptAddr), 8) + '): ' + E.Message;
+      {$else}
+      Result := Result + E.ClassName+'($' + IntToHex(Cardinal(PRaiseFrame(NextRaise)^.ExceptAddr), 8) + '): ' + E.Message;
+      {$endif}
+      {$ifdef JCL_DEBUG}
+      Result := Result + ' {' + GetLocationInfoStr(PRaiseFrame(NextRaise)^.ExceptAddr, True, True, True, True) + '}';
+      {$endif}
+    end
+    else
+    begin
+      Result := Result + '($' + IntToHex({$ifdef FPC}PtrUInt{$else}Cardinal{$endif}(PRaiseFrame(NextRaise)^.ExceptAddr), 8);
       Break;
-    if Result <> '' then
-      Result := Result + '; ';
-    Result := Result + E.ClassName+'($' + IntToHex(Cardinal(PRaiseFrame(NextRaise)^.ExceptAddr), 8) + '): ' + E.Message;
-    {$ifdef JCL_DEBUG}
-    Result := Result + ' {' + GetLocationInfoStr(PRaiseFrame(NextRaise)^.ExceptAddr, True, True, True, True) + '}';
-    {$endif}
+    end;
     NextRaise := PRaiseFrame(NextRaise)^.NextRaise;
   end;
 
