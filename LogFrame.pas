@@ -125,7 +125,11 @@ type
 
 implementation
 
-{$R *.dfm}
+{$ifdef FPC}
+ {$R *.lfm}
+{$else}
+ {$R *.dfm}
+{$endif}
 
 { TLogItemList }
 
@@ -439,7 +443,7 @@ begin
         ListItem.Caption := FormatDateTime('hh:nn:ss.zzz', Item.DateTime);
     end;
     // Сообщение
-    ListItem.SubItems.Append(Item.Text);
+    ListItem.SubItems.Append(Copy(Item.Text, 1, MaxInt));
   end;
 end;
 

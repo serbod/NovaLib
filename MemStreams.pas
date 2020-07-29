@@ -42,12 +42,17 @@ type
   TMemStream = class(TStream)
   protected
     FMemory: Pointer;
+    //FIsGlobal: Boolean;
     FSize, FPosition: Longint;
     FPrevCapacity: Longint;
     FCapacity: Longint;
     //FString: AnsiString;
     procedure SetPointer(Ptr: Pointer; ASize: Longint);
     procedure SetCapacity(NewCapacity: Longint);
+    function ReallocDefault(AMemory: Pointer; OldCapacity, NewCapacity: Longint): Pointer;
+    {$ifdef MEM_GLOBAL}
+    function ReallocGlobal(AMemory: Pointer; OldCapacity, NewCapacity: Longint): Pointer;
+    {$endif}
     function Realloc(var NewCapacity: Longint): Pointer; virtual;
   public
     constructor Create();
@@ -123,9 +128,10 @@ implementation
 type
   size_t = Cardinal;
 
-  const
+const
   MemoryDelta = $400; { Must be a power of 2 }
   MaxMemGrowDelta = $100000; // 1 ฬแ
+  MinGlobalMem = $1000; { 4สม }
 
 {$ifdef MEM_MSVCRT}
 const msvcrtDLL = 'msvcrt.dll';
@@ -220,6 +226,7 @@ begin
   SetCapacity(0);
   FSize := 0;
   FPosition := 0;
+  FMemory := nil;
 end;
 
 procedure TMemStream.LoadFromStream(Stream: TStream);
@@ -286,44 +293,58 @@ begin
   if OldPosition > NewSize then Seek(0, soFromEnd);
 end;
 
+function TMemStream.ReallocDefault(AMemory: Pointer; OldCapacity, NewCapacity: Integer): Pointer;
+begin
+  Result := AMemory;
+  if NewCapacity <> OldCapacity then
+  begin
+    if (NewCapacity = 0) then
+    begin
+      FreeMem(AMemory);
+      Result := nil;
+    end
+    else
+    begin
+      if (OldCapacity = 0) or (AMemory = nil) then
+      begin
+        GetMem(Result, NewCapacity);
+        if Result = nil then
+          raise EStreamError.Create('GetMem(' + IntToStr(NewCapacity) + ')=nil');
+      end
+      else
+      begin
+        ReallocMem(Result, NewCapacity);
+        if Result = nil then
+          raise EStreamError.Create('ReallocMem(' + IntToStr(NewCapacity) + ')=nil');
+      end;
+    end;
+  end;
+end;
+
 {$ifdef MEM_DEFAULT}
 function TMemStream.Realloc(var NewCapacity: Longint): Pointer;
 begin
-  Result := Memory;
-  if NewCapacity <> FCapacity then
-  begin
-    if NewCapacity = 0 then
-    begin
-      FreeMem(Memory);
-      Result := nil;
-    end else
-    begin
-      if Capacity = 0 then
-        GetMem(Result, NewCapacity)
-      else
-        ReallocMem(Result, NewCapacity);
-      if Result = nil then raise EStreamError.Create('Out of memory while expanding memory stream');
-    end;
-  end;
+  Result := ReallocDefault(Memory, FCapacity, NewCapacity);
 end;
 {$endif}
 
 {$ifdef MEM_GLOBAL}
-function TMemStream.Realloc(var NewCapacity: Longint): Pointer;
+function TMemStream.ReallocGlobal(AMemory: Pointer; OldCapacity, NewCapacity: Longint): Pointer;
 begin
-  Result := Memory;
-  if NewCapacity <> FCapacity then
+  Result := AMemory;
+  if NewCapacity <> OldCapacity then
   begin
     if NewCapacity = 0 then
     begin
-      GlobalFreePtr(Memory);
+      GlobalFreePtr(AMemory);
       Result := nil;
-    end else
+    end
+    else
     begin
       // HeapAllocFlags = GMEM_MOVEABLE
       // GMEM_MOVEABLE - working, but useless for GlobalAllocPtr / GlobalReallocPtr
       // GMEM_FIXED - handle = pointer, but not working sometimes
-      if Capacity = 0 then
+      if (OldCapacity = 0) or (AMemory = nil) then
       begin
         Result := GlobalAllocPtr(GMEM_MOVEABLE, NewCapacity);
         if Result = nil then
@@ -331,11 +352,47 @@ begin
       end
       else
       begin
-        Result := GlobalReallocPtr(Memory, NewCapacity, GMEM_MOVEABLE);
+        Result := GlobalReallocPtr(AMemory, NewCapacity, GMEM_MOVEABLE);
         if Result = nil then
           raise EStreamError.Create('GlobalReallocPtr(' + IntToStr(NewCapacity) + ')=nil');
       end;
     end;
+  end;
+
+end;
+
+function TMemStream.Realloc(var NewCapacity: Longint): Pointer;
+begin
+  if (NewCapacity >= MinGlobalMem) then
+  begin
+    // use global alloc
+    if (FCapacity >= MinGlobalMem) or (FCapacity = 0) then
+      Result := ReallocGlobal(Memory, FCapacity, NewCapacity)
+    else
+    begin
+      Result := ReallocGlobal(nil, 0, NewCapacity);
+      if (NewCapacity > FCapacity) and (FCapacity > 0) then
+        Move(Memory^, Result^, FCapacity)
+      else if NewCapacity > 0 then
+        Move(Memory^, Result^, NewCapacity);
+      ReallocDefault(Memory, FCapacity, 0);
+    end;
+  end
+  else
+  begin
+    // use default alloc
+    if (FCapacity < MinGlobalMem) then
+      Result := ReallocDefault(Memory, FCapacity, NewCapacity)
+    else
+    begin
+      Result := ReallocDefault(nil, 0, NewCapacity);
+      if (NewCapacity > FCapacity) and (FCapacity > 0) then
+        Move(Memory^, Result^, FCapacity)
+      else
+        Move(Memory^, Result^, NewCapacity);
+      ReallocGlobal(Memory, FCapacity, 0);
+    end;
+
   end;
 end;
 {$endif}
@@ -353,10 +410,17 @@ begin
     end else
     begin
       if Capacity = 0 then
-        Result := win_malloc(NewCapacity)
+      begin
+        Result := win_malloc(NewCapacity);
+        if Result = nil then
+          raise EStreamError.Create('win_malloc(' + IntToStr(NewCapacity) + ')=nil');
+      end
       else
+      begin
         Result := win_realloc(Result, NewCapacity);
-      if Result = nil then raise EStreamError.Create('Out of memory while expanding memory stream');
+        if Result = nil then
+          raise EStreamError.Create('win_realloc(' + IntToStr(NewCapacity) + ')=nil');
+      end;
     end;
   end;
 end;

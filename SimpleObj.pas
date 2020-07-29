@@ -2,6 +2,9 @@
 
 (C) Sergey Bodrov (serbod@gmail.com)
 MIT license
+
+
+TSimpleLock - simple spin-lock
 }
 unit SimpleObj;
 
@@ -21,7 +24,7 @@ type
     LockCount: Integer;
   public
     procedure Init();
-    function Acquire(): Boolean;
+    function Acquire(ALockTryCount: Integer = 100): Boolean;
     procedure Release();
   end;
 
@@ -88,34 +91,56 @@ type
     function FindValue(const Key: string; out Value: Integer): Boolean;
   end;
 
+procedure SimplePause(ACount: LongWord);
+
 implementation
 
 const
   WR_LOCK = $10000;
+  PAUSE_COUNT = 10000;
 
 {$ifndef FPC}
 const
   fsFromEnd = 2;
+
+procedure SimplePause(ACount: LongWord);
+begin
+  SleepEx(ACount, True);
+  {asm
+    MOV EAX, ACount
+    MOV EBX, PAUSE_COUNT
+    MUL EBX
+    MOV ECX, EAX
+  @start1:
+    PAUSE
+    LOOP @start1
+  end; }
+end;
+
+{$else}
+
+procedure SimplePause(ACount: LongWord);
+begin
+  SleepEx(ACount, True);
+end;
 {$endif}
 
 { TSimpleLock }
 
-function TSimpleLock.Acquire: Boolean;
-var
-  LockTryCount: Integer;
+function TSimpleLock.Acquire(ALockTryCount: Integer): Boolean;
 begin
   // try to acquire exclusive lock
-  LockTryCount := 10;
-  while (InterlockedIncrement(LockCount) > 1) and (LockTryCount > 0) do
+  while (InterlockedIncrement(LockCount) > 1) and (ALockTryCount > 0) do
   begin
     InterlockedDecrement(LockCount);
-    Dec(LockTryCount);
-    if (LockTryCount = 0) then
+    Dec(ALockTryCount);
+    if (ALockTryCount <= 0) then
     begin
       Result := False;
       Exit;
     end;
-    Sleep(1);
+    //SleepEx(1, True);
+    SimplePause(1);
   end;
   Result := True;
 end;
@@ -148,7 +173,8 @@ begin
       Result := False;
       Exit;
     end;
-    Sleep(1);
+    //SleepEx(1, True);
+    SimplePause(1);
   end;
   Result := True;
 end;
@@ -168,7 +194,8 @@ begin
       Result := False;
       Exit;
     end;
-    Sleep(1);
+    //SleepEx(1, True);
+    SimplePause(1);
   end;
   Result := True;
 end;
@@ -306,7 +333,9 @@ begin
     Result := Copy(FData, 1, ASize);
     Delete(FData, 1, ASize);
     FLock.Release();
-  end;
+  end
+  else
+    Result := '';
 end;
 
 function TSimpleDataQueue.Peek(ASize: Integer): AnsiString;
@@ -315,7 +344,9 @@ begin
   begin
     Result := Copy(FData, 1, ASize);
     FLock.Release();
-  end;
+  end
+  else
+    Result := '';
 end;
 
 { TSimpleStringHash }
