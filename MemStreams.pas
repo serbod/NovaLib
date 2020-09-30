@@ -7,6 +7,8 @@ TMemStream
   MEM_MSVCRT mode - use msvcrt.dll, with latest updates and fixes
   MEM_STRING mode - use AnsiString for memory buffer
 
+  In MEM_GLOBAL mode, Size under MinGlobalMem (4Kb default) alocated in MEM_DEFAULT mode
+
 TMemString
   TMemStream with some String methods (Pos, Copy, Delete..)
 

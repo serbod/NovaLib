@@ -855,7 +855,7 @@ begin
   begin
     E := Exception(PRaiseFrame(NextRaise)^.ExceptObject);
     if Result <> '' then
-      Result := Result + '; ';
+      Result := Result + '; ' + sLineBreak;
     if Assigned(E) then
       Result := Result + E.ClassName+'($' + IntToHex(Cardinal(PRaiseFrame(NextRaise)^.ExceptAddr), 8) + '): ' + E.Message;
     NextRaise := PRaiseFrame(NextRaise)^.NextRaise;
