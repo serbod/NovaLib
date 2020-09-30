@@ -240,6 +240,7 @@ begin
   {$endif}
   {$WARNINGS ON}
 
+  (*
   while NextRaise <> nil do
   begin
     E := Exception(PRaiseFrame(NextRaise)^.ExceptObject);
@@ -263,14 +264,19 @@ begin
     end;
     NextRaise := PRaiseFrame(NextRaise)^.NextRaise;
   end;
+  *)
 
-  {E := Exception(ExceptObject);
+  E := Exception(ExceptObject);
   if Assigned(E) then
   begin
+    {$ifdef FPC}
+    Result := E.ClassName+'($'+IntToHex(PtrUInt(ExceptAddr), 8)+'): '+E.Message;
+    {$else}
     Result := E.ClassName+'($'+IntToHex(Cardinal(ExceptAddr), 8)+'): '+E.Message;
+    {$endif}
   end
   else
-    Result := ''; }
+    Result := '';
 end;
 
 procedure LogException();
