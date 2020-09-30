@@ -31,9 +31,10 @@ type
   TSimpleRWLock = object
   private
     LockCount: Integer;
+    WriteThreadID: Cardinal;
   public
     procedure Init();
-    function BeginRead(ALockTryCount: Integer = 10000): Boolean;
+    function BeginRead(ALockTryCount: Integer = 1000): Boolean;
     function BeginWrite(): Boolean;
     procedure EndRead();
     procedure EndWrite();
@@ -96,7 +97,7 @@ procedure SimplePause(ACount: LongWord);
 implementation
 
 const
-  WR_LOCK = $10000;
+  WR_LOCK     = $10000;
   PAUSE_COUNT = 10000;
 
 {$ifndef FPC}
@@ -105,8 +106,9 @@ const
 
 procedure SimplePause(ACount: LongWord);
 begin
-  SleepEx(ACount, True);
-  {asm
+  //Sleep(ACount);
+  //SleepEx(ACount, True);
+  asm
     MOV EAX, ACount
     MOV EBX, PAUSE_COUNT
     MUL EBX
@@ -114,7 +116,7 @@ begin
   @start1:
     PAUSE
     LOOP @start1
-  end; }
+  end;
 end;
 
 {$else}
@@ -129,20 +131,23 @@ end;
 
 function TSimpleLock.Acquire(ALockTryCount: Integer): Boolean;
 begin
-  // try to acquire exclusive lock
-  while (InterlockedIncrement(LockCount) > 1) and (ALockTryCount > 0) do
+  Result := False;
+  while (ALockTryCount > 0) do
   begin
-    InterlockedDecrement(LockCount);
-    Dec(ALockTryCount);
-    if (ALockTryCount <= 0) then
+    // returns LockCount before increment
+    if (InterlockedExchangeAdd(LockCount, $1) = 0) then
     begin
-      Result := False;
-      Exit;
+      ALockTryCount := 0;
+      Result := True;
+    end
+    else
+    begin
+      InterlockedExchangeAdd(LockCount, -$1);
+      Dec(ALockTryCount);
+      //SleepEx(1, True);
+      SimplePause(1);
     end;
-    //SleepEx(1, True);
-    SimplePause(1);
   end;
-  Result := True;
 end;
 
 procedure TSimpleLock.Init;
@@ -153,7 +158,7 @@ end;
 procedure TSimpleLock.Release;
 begin
   // release exclusive lock
-  InterlockedDecrement(LockCount);
+  InterlockedExchangeAdd(LockCount, -$1);
 end;
 
 { TSimpleRWLock }
@@ -162,42 +167,76 @@ function TSimpleRWLock.BeginRead(ALockTryCount: Integer): Boolean;
 var
   LockTryCount: Integer;
 begin
+  Result := False;
   // try to acquire permissive lock
   LockTryCount := ALockTryCount;
-  while (InterlockedExchangeAdd(LockCount, $1) >= WR_LOCK) and (LockTryCount > 0) do
+  while (LockTryCount > 0) do
   begin
-    InterlockedExchangeAdd(LockCount, -$1);
-    Dec(LockTryCount);
-    if (LockTryCount = 0) then
+    if (InterlockedExchangeAdd(LockCount, $1) < WR_LOCK) then
     begin
-      Result := False;
-      Exit;
+      Result := True;
+      LockTryCount := 0;
+    end
+    else
+    begin
+      InterlockedExchangeAdd(LockCount, -$1);
+      Dec(LockTryCount);
+      //SleepEx(1, True);
+      SimplePause(1);
     end;
-    //SleepEx(1, True);
-    SimplePause(1);
   end;
-  Result := True;
 end;
 
 function TSimpleRWLock.BeginWrite: Boolean;
 var
-  LockTryCount: Integer;
+  LockTryCount, LockWaitCount: Integer;
+  n: Integer;
 begin
-  // try to acquire exclusive lock
   LockTryCount := 10;
-  while (InterlockedExchangeAdd(LockCount, WR_LOCK) > 0) and (LockTryCount > 0) do
+  LockWaitCount := 100;
+  Result := False;
+  // set lock to prevent new readers, return LockCount before
+  n := InterlockedExchangeAdd(LockCount, WR_LOCK);
+  while (LockTryCount > 0) do
   begin
-    InterlockedExchangeAdd(LockCount, -WR_LOCK);
-    Dec(LockTryCount);
-    if (LockTryCount = 0) then
+    if (n = 0) then
     begin
-      Result := False;
+      Result := True;
+      WriteThreadID := GetCurrentThreadId();
       Exit;
+    end
+    else
+    begin
+      if (n < WR_LOCK) and (LockWaitCount > 0) then
+      begin
+        // was locked by reader, unlock after pause
+        Dec(LockWaitCount);
+        SimplePause(1);
+        InterlockedExchangeAdd(LockCount, -WR_LOCK);
+      end
+      else
+      begin
+        // was locked by other writer
+        if WriteThreadID = GetCurrentThreadId() then
+        begin
+          // writer in same thread, recursive
+          Result := True;
+          Exit;
+        end
+        else
+        begin
+          // writer in other thread, unlock before pause
+          InterlockedExchangeAdd(LockCount, -WR_LOCK);
+          Dec(LockTryCount);
+          //SleepEx(1, True);
+          SimplePause(1);
+        end;
+      end;
+      // try lock again
+      if LockTryCount > 0 then
+        n := InterlockedExchangeAdd(LockCount, WR_LOCK);
     end;
-    //SleepEx(1, True);
-    SimplePause(1);
   end;
-  Result := True;
 end;
 
 procedure TSimpleRWLock.EndRead;
@@ -206,11 +245,7 @@ var
 begin
   // release read lock
   n := InterlockedExchangeAdd(LockCount, -$1);
-  if (n < $0) or (n >= WR_LOCK) then
-  begin
-    // was not locked or was write-locked
-    InterlockedExchangeAdd(LockCount, $1);
-  end;
+  Assert(n > $0, 'TSimpleRWLock.EndRead() was not locked =' + IntToStr(n));
 end;
 
 procedure TSimpleRWLock.EndWrite;
@@ -218,9 +253,11 @@ begin
   // release exclusive write lock
   if InterlockedExchangeAdd(LockCount, -WR_LOCK) < WR_LOCK then
   begin
+    Assert(False, 'TSimpleRWLock.EndWrite() was not locked');
     // was not locked
-    InterlockedExchangeAdd(LockCount, WR_LOCK);
+    //InterlockedExchangeAdd(LockCount, WR_LOCK);
   end;
+  WriteThreadID := 0;
 end;
 
 procedure TSimpleRWLock.Init;
