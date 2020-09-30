@@ -24,16 +24,16 @@ type
     {$endif}
     procedure SetLoop(const Value: Boolean);
   public
-    { AFileName - имя звукового файла или псевдоним для семпла из памяти
-      AMem - указатель на сэмпл в памяти или nil
-      AMemSize - размер сэмпла в памяти }
+    { AFileName - sound file name or pseudoname for sample in memory
+      AMem - pointer to sample in memory (or nil)
+      AMemSize - size of sampe in memory }
     constructor Create(const AFileName: string; AMem: Pointer = nil; AMemSize: Integer = 0);
     destructor Destroy(); override;
 
     procedure Play();
     procedure Stop();
 
-    { повтор воспроизведения с начала при достижении конца файла/сэмпла }
+    { repeat playback from beginning after reaching an end of file/sample }
     property Loop: Boolean read FLoop write SetLoop;
     property Alias: string read FAlias write FAlias;
     property Filename: string read FFilename;
@@ -82,14 +82,14 @@ begin
       Exit;
     end;
   end;
-  // не найден, добавляем
+  // not found, appending
   i := Length(glMemFileInfoArray);
   SetLength(glMemFileInfoArray, i+1);
   glMemFileInfoArray[i] := AMemFileInfo;
 end;
 
 
-{ Callback для чтения медиафайла из памяти}
+{ Callback for reading sample from memory }
 function MyIOCallback(Info: PChar; Msg: UINT; LParam1, LParam2: LPARAM): Longint stdcall;
 var
   MMIOInfo: PMMIOInfo;
@@ -225,7 +225,7 @@ begin
   RetVal := mciSendString(PChar(Cmd), nil, 0, Self.FWindowHandle);
   if RetVal <> 0 then
   begin
-    {get message for returned value}
+    { get message for returned value }
     mciGetErrorString(RetVal, ErrMsg, 255);
     //MessageDlg(StrPas(ErrMsg), mtError, [mbOK], 0);
   end;
