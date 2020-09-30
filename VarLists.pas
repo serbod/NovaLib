@@ -70,7 +70,7 @@ type
     VType: TVarType;
     Reserved1, Reserved2, Reserved3: Word;
     VList: TVariantList;
-    Reserved4: LongInt;
+    Reserved4: {$ifdef FPC}PtrInt{$else}LongInt{$endif};
   end;
 
 var
@@ -148,16 +148,19 @@ end;
 function TVarListType.DoFunction(var Dest: TVarData;
   const V: TVarData; const Name: string;
   const Arguments: TVarDataArray): Boolean;
+var
+  sName: string;
 begin
   Result := False;
  
-  if (Name = 'GETCOUNT') then
+  sName := UpCase(Name);
+  if (sName = 'GETCOUNT') then
   begin
     Variant(Dest) := TVarListData(V).VList.GetCount();
     Result := True;
   end
   else
-  if (Name = 'GETVALUE') and (Length(Arguments) = 1) then
+  if (sName = 'GETVALUE') and (Length(Arguments) = 1) then
   begin
     // GetValue(Index)
     TVarListData(V).VList.GetValue(Variant(Arguments[0]), Dest);
@@ -168,22 +171,25 @@ end;
 
 function TVarListType.DoProcedure(const V: TVarData; const Name: string;
   const Arguments: TVarDataArray): Boolean;
+var
+  sName: string;
 begin
-  if (Name = 'SETVALUE') and (Length(Arguments) = 2) then
+  sName := UpCase(Name);
+  if (sName = 'SETVALUE') and (Length(Arguments) = 2) then
   begin
     // SetValue(Index, Value)
     TVarListData(V).VList.SetValue(Variant(Arguments[0]), Arguments[1]);
     Result := True;
   end
   else
-  if (Name = 'ADDVALUE') and (Length(Arguments) = 1) then
+  if (sName = 'ADDVALUE') and (Length(Arguments) = 1) then
   begin
     // AddValue(Value)
     TVarListData(V).VList.AddValue(Arguments[0]);
     Result := True;
   end
   else
-  if (Name = 'SETCAPACITY') and (Length(Arguments) = 1) then
+  if (sName = 'SETCAPACITY') and (Length(Arguments) = 1) then
   begin
     // SetCapacity(MaxCount)
     TVarListData(V).VList.SetCapacity(Variant(Arguments[0]));
