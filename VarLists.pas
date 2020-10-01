@@ -44,6 +44,8 @@ type
 
 implementation
 
+uses SysUtils;
+
 type
   TVariantListItemArray = array of TVarData;
 
@@ -153,7 +155,7 @@ var
 begin
   Result := False;
  
-  sName := UpCase(Name);
+  sName := UpperCase(Name);
   if (sName = 'GETCOUNT') then
   begin
     Variant(Dest) := TVarListData(V).VList.GetCount();
@@ -174,7 +176,7 @@ function TVarListType.DoProcedure(const V: TVarData; const Name: string;
 var
   sName: string;
 begin
-  sName := UpCase(Name);
+  sName := UpperCase(Name);
   if (sName = 'SETVALUE') and (Length(Arguments) = 2) then
   begin
     // SetValue(Index, Value)

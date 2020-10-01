@@ -47,7 +47,7 @@ type
     procedure Clear(var V: TVarData); override;
     procedure Copy(var Dest: TVarData; const Source: TVarData; const Indirect: Boolean); override;
     function GetProperty(var Dest: TVarData; const V: TVarData; const Name: string): Boolean; override;
-    function SetProperty(var V: TVarData; const Name: string; const Value: TVarData): Boolean; override;
+    function SetProperty({$ifdef FPC}var{$else}const{$endif} V: TVarData; const Name: string; const Value: TVarData): Boolean; override;
     function DoFunction(var Dest: TVarData; const V: TVarData;
       const Name: string; const Arguments: TVarDataArray): Boolean; override;
     function DoProcedure(const V: TVarData; const Name: string;
@@ -226,7 +226,7 @@ begin
     Result := False;
 end;
 
-function TVarDictType.SetProperty(var V: TVarData;
+function TVarDictType.SetProperty({$ifdef FPC}var{$else}const{$endif} V: TVarData;
   const Name: string; const Value: TVarData): Boolean;
 begin
   Result := InternalSetProperty(V, Name, Value);
