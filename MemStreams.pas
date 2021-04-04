@@ -48,8 +48,7 @@ type
     FSize, FPosition: Longint;
     FPrevCapacity: Longint;
     FCapacity: Longint;
-    //FString: AnsiString;
-    procedure SetPointer(Ptr: Pointer; ASize: Longint);
+    procedure SetPointer(APtr: Pointer; ASize: Longint);
     procedure SetCapacity(NewCapacity: Longint);
     function ReallocDefault(AMemory: Pointer; OldCapacity, NewCapacity: Longint): Pointer;
     {$ifdef MEM_GLOBAL}
@@ -82,12 +81,12 @@ type
     destructor Destroy; override;
     procedure Assign(const Value: string);
     procedure SetLength(NewLength: Integer);
-    // удаление части буфера, сдвиг остального на освободившееся место
-    // аналог Delete(string)
+    // delete part of buffer, shift remains to freed space
+    // same as Delete(string)
     procedure Delete(Index, Count: Integer);
-    // поиск подстроки
+    // find substring position
     function Pos(const Substr: string): Integer;
-    // возвращает подстроку
+    // returns substring
     function Copy(Index, Count: Integer): string;
     function CopyEx(Index, Count: Integer; var AStr: string): Boolean;
     property Chars[Index: Integer]: Char read GetChar write SetChar;
@@ -166,15 +165,15 @@ begin
   {$endif}
 end;
 
-procedure TMemStream.SetPointer(Ptr: Pointer; ASize: Longint);
+procedure TMemStream.SetPointer(APtr: Pointer; ASize: Longint);
 begin
-  FMemory := Ptr;
+  FMemory := APtr;
   FSize := ASize;
 end;
 
 function TMemStream.Read(var Buffer; Count: Longint): Longint;
 var
-  p: Pointer;
+  p: PByte;
 begin
   if (FPosition >= 0) and (Count >= 0) then
   begin
@@ -183,11 +182,7 @@ begin
     begin
       if Result > Count then Result := Count;
       p := FMemory;
-      {$ifdef FPC}
       Inc(p, FPosition);
-      {$else}
-      p := Ptr(Integer(p) + FPosition);
-      {$endif}
       Move(p^, Buffer, Result);
       Inc(FPosition, Result);
       Exit;
@@ -444,28 +439,24 @@ end;
 
 function TMemStream.Write(const Buffer; Count: Longint): Longint;
 var
-  Pos: Longint;
-  p: Pointer;
+  iPos: Longint;
+  p: PByte;
 begin
   if (FPosition >= 0) and (Count >= 0) then
   begin
-    Pos := FPosition + Count;
-    if Pos > 0 then
+    iPos := FPosition + Count;
+    if iPos > 0 then
     begin
-      if Pos > FSize then
+      if iPos > FSize then
       begin
-        if Pos > FCapacity then
-          SetCapacity(Pos);
-        FSize := Pos;
+        if iPos > FCapacity then
+          SetCapacity(iPos);
+        FSize := iPos;
       end;
       p := FMemory;
-      {$ifdef FPC}
       Inc(p, FPosition);
-      {$else}
-      p := Ptr(Integer(p) + FPosition);
-      {$endif}
       System.Move(Buffer, p^, Count);
-      FPosition := Pos;
+      FPosition := iPos;
       Result := Count;
       Exit;
     end;
@@ -650,7 +641,7 @@ end;
 
 function TMemString.Copy(Index, Count: Integer): string;
 var
-  p: Pointer;
+  p: PByte;
 begin
   if Index < 0 then
     Index := 0;
@@ -664,11 +655,8 @@ begin
   System.SetLength(Result, Count);
   if Count > 0 then
   begin
-    {$IFDEF FPC}
-    p := FMemory + Index;
-    {$ELSE}
-    p := Ptr(Integer(FMemory) + Index);
-    {$ENDIF}
+    p := FMemory;
+    Inc(p, Index);
     System.Move(p^, Result[1], Count);
   end;
 end;
@@ -676,7 +664,7 @@ end;
 function TMemString.CopyEx(Index, Count: Integer;
   var AStr: string): Boolean;
 var
-  p: Pointer;
+  p: PByte;
 begin
   if Index < 0 then
     Index := 0;
@@ -690,11 +678,8 @@ begin
   System.SetLength(AStr, Count);
   if Count > 0 then
   begin
-    {$IFDEF FPC}
-    p := FMemory + Index;
-    {$ELSE}
-    p := Ptr(Integer(FMemory) + Index);
-    {$ENDIF}
+    p := FMemory;
+    Inc(p, Index);
     System.Move(p^, AStr[1], Count);
     Result := True;
   end
@@ -751,7 +736,7 @@ end;
 
 procedure TMemString.Delete(Index, Count: Integer);
 var
-  ps, pd: Pointer;
+  ps, pd: PByte;
 begin
   if Index+Count > FLength then
     Count := FLength - Index;
@@ -759,13 +744,10 @@ begin
     Count := 0;
   if Count > 0 then
   begin
-    {$IFDEF FPC}
-    ps := FMemory + Index + Count;
-    pd := FMemory + Index;
-    {$ELSE}
-    ps := Ptr(Integer(FMemory) + Index + Count);
-    pd := Ptr(Integer(FMemory) + Index);
-    {$ENDIF}
+    ps := FMemory;
+    Inc(ps, Index + Count);
+    pd := FMemory;
+    Inc(pd, Index);
     System.Move(ps^, pd^, Count);
     FLength := FLength - Count;
   end;
@@ -773,31 +755,25 @@ end;
 
 function TMemString.GetChar(Index: Integer): Char;
 var
-  p: Pointer;
+  p: PByte;
 begin
   if (Index < 0) or (Index > FLength) then
     Exit;
 
-  {$IFDEF FPC}
-  p := FMemory + Index;
-  {$ELSE}
-  p := Ptr(Integer(FMemory) + Index);
-  {$ENDIF}
+  p := FMemory;
+  Inc(p, Index);
   System.Move(p^, Result, SizeOf(Char));
 end;
 
 procedure TMemString.SetChar(Index: Integer; Value: Char);
 var
-  p: Pointer;
+  p: PByte;
 begin
   if (Index < 0) or (Index > FLength) then
     Exit;
 
-  {$IFDEF FPC}
-  p := FMemory + Index;
-  {$ELSE}
-  p := Ptr(Integer(FMemory) + Index);
-  {$ENDIF}
+  p := FMemory;
+  Inc(p, Index);
   System.Move(Value, p^, SizeOf(Char));
 end;
 
