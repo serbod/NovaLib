@@ -273,6 +273,7 @@ begin
       Assert((SizeOf(StrLen) <= (AStream.Size-AStream.Position)), 'Size='+IntToStr(AStream.Size)+' Pos='+IntToStr(AStream.Position));
       AStream.ReadBuffer(StrLen, SizeOf(StrLen));
       //if StrLen > 0 then FStream.ReadBuffer(Result[1], StrLen);
+      Assert((StrLen <= (AStream.Size-AStream.Position)), 'Size='+IntToStr(AStream.Size)+' Pos='+IntToStr(AStream.Position));
       AStream.Position := AStream.Position + StrLen;
     end;
 

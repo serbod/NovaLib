@@ -234,7 +234,7 @@ begin
       for i := 0 to 7 do
       begin
         if (Result and $80) <> 0 then
-          Result := ((Result shl 1) xor APoly)
+          Result := (((Result and $7F) shl 1) xor APoly)
         else
           Result := (Result shl 1);
       end;
@@ -271,7 +271,7 @@ begin
       for ii := 1 to 8 do
       begin
         if (c and $80) <> 0 then
-          c := (c shl 1) xor APoly
+          c := ((c and $7F) shl 1) xor APoly
         else
           c := (c shl 1);
       end;
@@ -310,7 +310,7 @@ begin
       for i := 0 to 7 do
       begin
         if (Result and $8000) <> 0 then
-          Result := ((Result shl 1) xor APoly)
+          Result := (((Result and $7FFF) shl 1) xor APoly)
         else
           Result := (Result shl 1);
       end;
@@ -364,7 +364,7 @@ begin
       for ii := 1 to 8 do
       begin
         if (c and $8000) <> 0 then
-          c := (c shl 1) xor APoly
+          c := ((c and $7FFF) shl 1) xor APoly
         else
           c := (c shl 1);
       end;

@@ -262,12 +262,12 @@ object FrameTerminal: TFrameTerminal
     FullRedraw = False
     SelColor = clHighlight
     SelTextColor = clHighlightText
-    left = 107
-    top = 90
+    Left = 107
+    Top = 90
   end
   object alTerm: TActionList
-    left = 330
-    top = 144
+    Left = 330
+    Top = 144
     object actTermClear: TAction
       Caption = 'Очистить'
       OnExecute = actTermClearExecute

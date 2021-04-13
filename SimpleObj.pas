@@ -40,6 +40,7 @@ type
     procedure EndWrite();
   end;
 
+  { TSimpleFileWriter }
   { Simple thread-safe file writer for log files }
   TSimpleFileWriter = object
   private
@@ -51,7 +52,7 @@ type
     procedure Init();
     procedure Term();
     { Append data to file. Note! Line ending chars not auto-added! }
-    procedure Write(const AStr: AnsiString = '');
+    procedure Write(const AStr: AnsiString = ''; AForceFlush: Boolean = False);
   end;
 
   { TSimpleDataQueue }
@@ -274,7 +275,7 @@ begin
   FLock.Init();
 end;
 
-procedure TSimpleFileWriter.Write(const AStr: AnsiString);
+procedure TSimpleFileWriter.Write(const AStr: AnsiString; AForceFlush: Boolean);
 var
   {$IFDEF FPC}
   Res: THandle;
@@ -324,7 +325,7 @@ begin
       FileWrite(fh, AStr[1], Length(AStr));
     //Flush(f); // forced flush data from buffer to file
     Inc(FUnflushedCount);
-    if FUnflushedCount > 10 then
+    if AForceFlush or (FUnflushedCount > 10) then
     begin
       // another forced flush
       FUnflushedCount := 0;

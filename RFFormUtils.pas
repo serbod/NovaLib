@@ -13,7 +13,7 @@ uses
   LazUTF8,
   {$ENDIF}
   Windows, SysUtils, Classes, Messages, Types, Forms,
-  StdCtrls, ComCtrls, Controls;
+  StdCtrls, ComCtrls, Controls, Clipbrd;
 
 // вызов справки
 procedure ShowHelp();
@@ -60,6 +60,9 @@ procedure FormSizeFromStr(AForm: TScrollingWinControl; const AStr: string);
 // для уменьшения напрасной перерисовки
 procedure UpdateLabelCaption(Item: TCustomLabel; Text: string);
 
+// Установить текст в буфере обмена (с учетом кодировки)
+procedure SetClipboardText(const Text: string);
+function GetClipboardText(): string;
 
 implementation
 
@@ -163,7 +166,7 @@ begin
     h := (ASender as TWinControl).Handle;
   if ACaption = '' then
     ACaption := Application.Title;
-  MessageBox(h, PChar(AText), PChar(ACaption), MB_ICONINFORMATION or MB_TOPMOST or MB_TASKMODAL);
+  MessageBox(h, PChar(AText), PChar(ACaption), MB_ICONERROR or MB_TOPMOST or MB_TASKMODAL);
 end;
 
 procedure ShowLogFile(ASender: TObject; AFileName: string; ACaption: string = '');
@@ -426,6 +429,58 @@ begin
     Item.Caption := Text;
 end;
 
+procedure SetClipboardText(const Text: string);
+{$ifndef FPC}
+var
+  wText: WideString;
+  Count: Integer;
+  Handle: HGLOBAL;
+  Ptr: Pointer;
+{$endif}
+begin
+{$ifndef FPC}
+  Count := (Length(Text) + 1) * SizeOf(WideChar);
+  wText := Text;
+  StringToWideChar(Text, PWideChar(wText), Count);
+  Handle := GlobalAlloc(GMEM_MOVEABLE, Count);
+  try
+    //Win32Check(Handle <> 0);
+    if not (Handle <> 0) then RaiseLastOSError;
+    Ptr := GlobalLock(Handle);
+    //Win32Check(Assigned(Ptr));
+    if not Assigned(Ptr) then RaiseLastOSError;
+    Move(PWideChar(wText)^, Ptr^, Count);
+    GlobalUnlock(Handle);
+    Clipboard.SetAsHandle(CF_UNICODETEXT, Handle);
+  except
+    GlobalFree(Handle);
+    raise;
+  end;
+{$else}
+  Clipboard.AsText := Text;
+{$endif}
+end;
 
+function GetClipboardText(): string;
+{$ifndef FPC}
+var
+  pText: PWideChar;
+  Handle: HGLOBAL;
+{$endif}
+begin
+{$ifndef FPC}
+  Clipboard.Open();
+  try
+    Handle := Clipboard.GetAsHandle(CF_UNICODETEXT);
+    pText := GlobalLock(Handle);
+    Result := WideCharToString(pText);
+    GlobalUnlock(Handle);
+  finally
+    Clipboard.Close();
+  end;
+{$else}
+  Result := Clipboard.AsText;
+{$endif}
+end;
 
 end.

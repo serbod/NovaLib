@@ -1093,9 +1093,9 @@ CP1251Encoding := TMBCSEncoding.Create(1251);
 //GetFormatSettings(GetThrea, RFFormatSettings);
 RFFormatSettings.DecimalSeparator := '.';
 RFFormatSettings.ThousandSeparator := '_';
-RFFormatSettings.DateSeparator := '.';
+RFFormatSettings.DateSeparator := '-';
 RFFormatSettings.TimeSeparator := ':';
-RFFormatSettings.ShortDateFormat := 'yyyy.mm.dd';
+RFFormatSettings.ShortDateFormat := 'yyyy-mm-dd';
 RFFormatSettings.ShortTimeFormat := 'hh:nn:ss';
 
 {$ifndef FPC}

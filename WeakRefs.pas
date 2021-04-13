@@ -1,5 +1,10 @@
 {
-Механизм "слабых ссылок", позволяет проверять, жив ли объект или нет
+Shared "weak reference", that stored actual pointer to object
+and resides in memory while used by someone.
+Allows you to check whether an object is alive or not.
+
+Слабая ссылка хранит указатель на какой-то объект и висит в памяти,
+пока ее кто-то использует. Позволяет проверять, жив ли объект или нет.
 Sergey Bodrov (serbod@gmail.com) 2016
 }
 unit WeakRefs;
@@ -14,8 +19,6 @@ type
     function GetOwner(): TObject;
   end;
 
-  { Слабая ссылка, которая хранит ссылку на какой-то объект и висит в памяти,
-    пока ее кто-то использует. Позволяет проверять, жив ли объект или нет. }
   TWeakRef = class(TInterfacedObject, IWeakRef)
   private
     FOwner: TObject;
@@ -26,7 +29,7 @@ type
     function GetOwner(): TObject;
   end;
 
-  { Пример класса объекта, который может дать слабую ссылку на себя }
+  { Example of class, that can give weak ref }
   TWeakObject = class(TObject)
   protected
     FWeakRef: IWeakRef;
