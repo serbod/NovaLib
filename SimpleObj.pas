@@ -4,7 +4,11 @@
 MIT license
 
 
-TSimpleLock - simple spin-lock
+TSimpleLock - spin-lock with timeout
+TSimpleRWLock - spin-lock with timeout for read/write operations
+TSimpleFileWriter - thread-safe file writer for log files
+TSimpleDataQueue - thread-safe AnsiString data queue
+TStringHash - string-to-integer hashtable
 }
 unit SimpleObj;
 
@@ -24,7 +28,8 @@ type
     LockCount: Integer;
   public
     procedure Init();
-    function Acquire(ALockTryCount: Integer = 100): Boolean;
+    { Return False if lock not acquired in ATimeout milliseconds }
+    function Acquire(ATimeout: Integer = 100): Boolean;
     procedure Release();
   end;
 
@@ -34,8 +39,8 @@ type
     WriteThreadID: Cardinal;
   public
     procedure Init();
-    function BeginRead(ALockTryCount: Integer = 1000): Boolean;
-    function BeginWrite(): Boolean;
+    function BeginRead(ATimeout: Integer = 100): Boolean;
+    function BeginWrite(ATimeout: Integer = 1000): Boolean;
     procedure EndRead();
     procedure EndWrite();
   end;
@@ -99,20 +104,27 @@ implementation
 
 const
   WR_LOCK     = $10000;
-  PAUSE_COUNT = 10000;
+  PAUSE_COUNT = 5000;
 
 {$ifndef FPC}
 const
   fsFromEnd = 2;
 
+function QueryUnbiasedInterruptTime(var Value: Int64): Boolean; stdcall; external kernel32;
+
+function GetTickCount64(): Int64;
+begin
+  QueryUnbiasedInterruptTime(Result);
+  Result := Result div 10000;
+end;
+{$endif}
+
 procedure SimplePause(ACount: LongWord);
 begin
-  //Sleep(ACount);
-  //SleepEx(ACount, True);
   asm
     MOV EAX, ACount
-    MOV EBX, PAUSE_COUNT
-    MUL EBX
+    MOV ECX, PAUSE_COUNT
+    MUL ECX
     MOV ECX, EAX
   @start1:
     PAUSE
@@ -120,33 +132,46 @@ begin
   end;
 end;
 
-{$else}
-
-procedure SimplePause(ACount: LongWord);
+{ Sleep for Timeout milliseconds
+  Note! SleepTime parameter must be set to 2 before first use!
+  FinalTime must not be changed between calls }
+procedure SimpleSleep(var Timeout, SleepTime: Integer; var FinalTime: Int64);
 begin
-  SleepEx(ACount, True);
+  if SleepTime = 2 then
+  begin
+    FinalTime := GetTickCount64() + Abs(Timeout);
+    if GetCurrentThreadID = MainThreadID then
+      SleepTime := 1
+    else
+      SleepTime := 0;
+  end;
+  Sleep(SleepTime);
+  if GetTickCount64() >= FinalTime then
+    Timeout := -1;
 end;
-{$endif}
+
 
 { TSimpleLock }
 
-function TSimpleLock.Acquire(ALockTryCount: Integer): Boolean;
+function TSimpleLock.Acquire(ATimeout: Integer): Boolean;
+var
+  SleepTime: Integer;
+  FinalTime: Int64;
 begin
   Result := False;
-  while (ALockTryCount > 0) do
+  SleepTime := 2;
+  while (ATimeout >= 0) do
   begin
     // returns LockCount before increment
     if (InterlockedExchangeAdd(LockCount, $1) = 0) then
     begin
-      ALockTryCount := 0;
+      ATimeout := -1;
       Result := True;
     end
     else
     begin
       InterlockedExchangeAdd(LockCount, -$1);
-      Dec(ALockTryCount);
-      //SleepEx(1, True);
-      SimplePause(1);
+      SimpleSleep(ATimeout, SleepTime, FinalTime);
     end;
   end;
 end;
@@ -164,42 +189,41 @@ end;
 
 { TSimpleRWLock }
 
-function TSimpleRWLock.BeginRead(ALockTryCount: Integer): Boolean;
+function TSimpleRWLock.BeginRead(ATimeout: Integer): Boolean;
 var
-  LockTryCount: Integer;
+  SleepTime: Integer;
+  FinalTime: Int64;
 begin
   Result := False;
+  SleepTime := 2;
   // try to acquire permissive lock
-  LockTryCount := ALockTryCount;
-  while (LockTryCount > 0) do
+  while (ATimeout >= 0) do
   begin
     if (InterlockedExchangeAdd(LockCount, $1) < WR_LOCK) then
     begin
       Result := True;
-      LockTryCount := 0;
+      ATimeout := -1;
     end
     else
     begin
       InterlockedExchangeAdd(LockCount, -$1);
-      Dec(LockTryCount);
-      //SleepEx(1, True);
-      SimplePause(1);
+      SimpleSleep(ATimeout, SleepTime, FinalTime);
     end;
   end;
 end;
 
-function TSimpleRWLock.BeginWrite: Boolean;
+function TSimpleRWLock.BeginWrite(ATimeout: Integer): Boolean;
 var
-  LockTryCount, LockWaitCount: Integer;
+  SleepTime: Integer;
+  FinalTime: Int64;
   n: Integer;
 begin
-  LockTryCount := 10;
-  LockWaitCount := 100;
   Result := False;
+  SleepTime := 2;
   // set lock to prevent new readers, return LockCount before
-  n := InterlockedExchangeAdd(LockCount, WR_LOCK);
-  while (LockTryCount > 0) do
+  while (ATimeout >= 0) do
   begin
+    n := InterlockedExchangeAdd(LockCount, WR_LOCK);
     if (n = 0) then
     begin
       Result := True;
@@ -208,11 +232,10 @@ begin
     end
     else
     begin
-      if (n < WR_LOCK) and (LockWaitCount > 0) then
+      if (n < WR_LOCK) then
       begin
         // was locked by reader, unlock after pause
-        Dec(LockWaitCount);
-        SimplePause(1);
+        SimpleSleep(ATimeout, SleepTime, FinalTime);
         InterlockedExchangeAdd(LockCount, -WR_LOCK);
       end
       else
@@ -228,14 +251,9 @@ begin
         begin
           // writer in other thread, unlock before pause
           InterlockedExchangeAdd(LockCount, -WR_LOCK);
-          Dec(LockTryCount);
-          //SleepEx(1, True);
-          SimplePause(1);
+          SimpleSleep(ATimeout, SleepTime, FinalTime);
         end;
       end;
-      // try lock again
-      if LockTryCount > 0 then
-        n := InterlockedExchangeAdd(LockCount, WR_LOCK);
     end;
   end;
 end;
@@ -276,6 +294,8 @@ begin
 end;
 
 procedure TSimpleFileWriter.Write(const AStr: AnsiString; AForceFlush: Boolean);
+const
+  FILE_RIGHTS = 438; // FILE_ WRITE_DATA, APPEND_DATA, WRITE_EA, EXECUTE, READ_ATTRIBUTES, WRITE_ATTRIBUTES
 var
   {$IFDEF FPC}
   Res: THandle;
@@ -300,7 +320,7 @@ begin
     begin
       // file not exists? try to create new
       // Just created file not shared, despite to access flags
-      Res := FileCreate(FileName, 438);
+      Res := FileCreate(FileName, FILE_RIGHTS);
       {$IFDEF FPC}
       if Res <> feInvalidHandle then
       {$ELSE}

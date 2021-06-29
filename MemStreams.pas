@@ -7,7 +7,7 @@ TMemStream
   MEM_MSVCRT mode - use msvcrt.dll, with latest updates and fixes
   MEM_STRING mode - use AnsiString for memory buffer
 
-  In MEM_GLOBAL mode, Size under MinGlobalMem (4Kb default) alocated in MEM_DEFAULT mode
+  In MEM_GLOBAL mode, Size under MinGlobalMem (8Kb default) alocated in MEM_DEFAULT mode
 
 TMemString
   TMemStream with some String methods (Pos, Copy, Delete..)
@@ -132,7 +132,7 @@ type
 const
   MemoryDelta = $400; { Must be a power of 2 }
   MaxMemGrowDelta = $100000; // 1 ฬแ
-  MinGlobalMem = $1000; { 4สม }
+  MinGlobalMem = $2000; { 8สม }
 
 {$ifdef MEM_MSVCRT}
 const msvcrtDLL = 'msvcrt.dll';
@@ -150,7 +150,9 @@ begin
   {$endif}
   inherited;
   //FString := '';
+  FCapacity := 0;
   FPrevCapacity := 0;
+  FMemory := nil;
   Clear();
 end;
 
@@ -255,16 +257,19 @@ begin
   if (FCapacity > FPrevCapacity) and (NewCapacity > FCapacity) then
   begin
     // growing, calculate optimal capacity ahead
-    GrowDelta := FCapacity-FPrevCapacity;
-    GrowDelta2 := NewCapacity-FCapacity;
+    GrowDelta := Abs(FCapacity-FPrevCapacity);
+    GrowDelta2 := Abs(NewCapacity-FCapacity);
     if GrowDelta > GrowDelta2 then
       GrowDelta := GrowDelta2;
     if GrowDelta > MaxMemGrowDelta then
       GrowDelta := MaxMemGrowDelta;
     NewCapacity := NewCapacity + GrowDelta;
   end;
+  // align new capacity size up to 1 Kb
   if (NewCapacity > 0) and (NewCapacity <> FSize) then
     NewCapacity := (NewCapacity + (MemoryDelta - 1)) and not (MemoryDelta - 1);
+  if NewCapacity < 0 then
+    NewCapacity := 0;
 
   {$ifdef ANDROID}
   AtomicDecrement(GlobalMemStreamSize, FCapacity);
@@ -272,6 +277,7 @@ begin
   InterlockedExchangeAdd(GlobalMemStreamSize, -FCapacity);
   {$endif}
   SetPointer(Realloc(NewCapacity), FSize);
+  FPrevCapacity := FCapacity;
   FCapacity := NewCapacity;
   {$ifdef ANDROID}
   AtomicIncrement(GlobalMemStreamSize, NewCapacity);
@@ -284,10 +290,15 @@ procedure TMemStream.SetSize(NewSize: Longint);
 var
   OldPosition: Longint;
 begin
-  OldPosition := FPosition;
-  SetCapacity(NewSize);
-  FSize := NewSize;
-  if OldPosition > NewSize then Seek(0, soFromEnd);
+  if NewSize < 0 then
+    raise EStreamError.Create('SetSize(' + IntToStr(NewSize) + ')');
+  if FSize <> NewSize then
+  begin
+    OldPosition := FPosition;
+    SetCapacity(NewSize);
+    FSize := NewSize;
+    if OldPosition > NewSize then Seek(0, soFromEnd);
+  end;
 end;
 
 function TMemStream.ReallocDefault(AMemory: Pointer; OldCapacity, NewCapacity: Integer): Pointer;
