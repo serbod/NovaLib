@@ -53,6 +53,15 @@ type
   valid bookmark and has special values for when the dataset is positioned
   on the "cracks" at BOF and EOF. }
 
+{$IFNDEF FPC}
+  {$IF CompilerVersion >= 17.0}
+  PtrInt = NativeInt;
+  {$ELSE}
+  PtrInt = LongInt;
+  TRecordBuffer = PAnsiChar;
+  {$IFEND}
+{$ENDIF}
+
   TSnapCustomDataset = class;
 
   TSnapBookmark = pointer;
@@ -124,22 +133,22 @@ type
     function GetMasterAttribute: string;
     {$IFNDEF FPC}
     procedure SetDataSetField(const Value: TDataSetField); override;
-    procedure DataEvent(Event: TDataEvent; Info: LongInt); override;
+    procedure DataEvent(Event: TDataEvent; Info: PtrInt); override;
     {$ENDIF}
   protected
     // Internal functions that can be overriden if needed
-    procedure AllocateBLOBPointers(Buffer: PChar); virtual;
-    procedure FreeBlobPointers(Buffer: PChar); virtual;
-    procedure FreeRecordPointers(Buffer: PChar); virtual;
+    procedure AllocateBLOBPointers(Buffer: TRecordBuffer); virtual;
+    procedure FreeBlobPointers(Buffer: TRecordBuffer); virtual;
+    procedure FreeRecordPointers(Buffer: TRecordBuffer); virtual;
     function GetDataSize: Integer; virtual;
     function GetFieldOffset(Field: TField): Integer; virtual;
-    procedure BufferToRecord(Buffer: PChar); virtual;
-    procedure RecordToBuffer(Buffer: PChar); virtual;
+    procedure BufferToRecord(Buffer: TRecordBuffer); virtual;
+    procedure RecordToBuffer(Buffer: TRecordBuffer); virtual;
   protected
     // Dataset abstract methods (required)
-    function AllocRecordBuffer: PChar; override;
-    procedure FreeRecordBuffer(var Buffer: PChar); override;
-    function GetRecord(Buffer: PChar; GetMode: TGetMode; DoCheck: Boolean): TGetResult; override;
+    function AllocRecordBuffer: TRecordBuffer; override;
+    procedure FreeRecordBuffer(var Buffer: TRecordBuffer); override;
+    function GetRecord(Buffer: TRecordBuffer; GetMode: TGetMode; DoCheck: Boolean): TGetResult; override;
     function GetRecordSize: Word; override;
     procedure InternalInsert; override;
     procedure InternalClose; override;
@@ -148,22 +157,22 @@ type
     procedure InternalEdit; override;
     procedure InternalHandleException; override;
     procedure InternalInitFieldDefs; override;
-    procedure InternalInitRecord(Buffer: PChar); override;
+    procedure InternalInitRecord(Buffer: TRecordBuffer); override;
     procedure InternalLast; override;
     procedure InternalOpen; override;
     procedure InternalPost; override;
     procedure InternalCancel; override;
-    procedure InternalSetToRecord(Buffer: PChar); override;
+    procedure InternalSetToRecord(Buffer: TRecordBuffer); override;
     procedure InternalAddRecord(Buffer: Pointer; AAppend: Boolean); override;
     function IsCursorOpen: Boolean; override;
     function GetCanModify: Boolean; override;
-    procedure ClearCalcFields(Buffer: PChar); override;
-    function GetActiveRecordBuffer: PChar; virtual;
+    procedure ClearCalcFields(Buffer: TRecordBuffer); override;
+    function GetActiveRecordBuffer: TRecordBuffer; virtual;
     procedure SetFieldData(Field: TField; Buffer: Pointer); override;
-    procedure GetBookmarkData(Buffer: PChar; Data: Pointer); override;
-    function GetBookmarkFlag(Buffer: PChar): TBookmarkFlag; override;
-    procedure SetBookmarkFlag(Buffer: PChar; Value: TBookmarkFlag); override;
-    procedure SetBookmarkData(Buffer: PChar; Data: Pointer); override;
+    procedure GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
+    function GetBookmarkFlag(Buffer: TRecordBuffer): TBookmarkFlag; override;
+    procedure SetBookmarkFlag(Buffer: TRecordBuffer; Value: TBookmarkFlag); override;
+    procedure SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer); override;
     procedure InternalGotoBookmark(ABookmark: Pointer); override;
   public
     procedure AfterConstruction; override;
@@ -263,20 +272,20 @@ begin
   end;
 end;
 
-function TSnapCustomDataset.AllocRecordBuffer: PChar;
+function TSnapCustomDataset.AllocRecordBuffer: TRecordBuffer;
 begin
   GetMem(Result, GetRecordSize);
   FillChar(Result^, GetRecordSize, 0);
   AllocateBlobPointers(Result);
 end;
 
-procedure TSnapCustomDataset.FreeRecordBuffer(var Buffer: PChar);
+procedure TSnapCustomDataset.FreeRecordBuffer(var Buffer: TRecordBuffer);
 begin
   FreeRecordPointers(Buffer);
   FreeMem(Buffer, GetRecordSize);
 end;
 
-procedure TSnapCustomDataset.FreeRecordPointers(Buffer: PChar);
+procedure TSnapCustomDataset.FreeRecordPointers(Buffer: TRecordBuffer);
 begin
   FreeBlobPointers(Buffer);
   DisposeRecordID(PRecordInfo(Buffer + GetDataSize)^.RecordID);
@@ -287,7 +296,7 @@ begin
     end;
 end;
 
-procedure TSnapCustomDataset.AllocateBLOBPointers(Buffer: PChar);
+procedure TSnapCustomDataset.AllocateBLOBPointers(Buffer: TRecordBuffer);
 var
   Index: Integer;
   Offset: Integer;
@@ -302,7 +311,7 @@ begin
       end;
 end;
 
-procedure TSnapCustomDataset.FreeBlobPointers(Buffer: PChar);
+procedure TSnapCustomDataset.FreeBlobPointers(Buffer: TRecordBuffer);
 var
   Index: Integer;
   Offset: Integer;
@@ -325,21 +334,21 @@ begin
   DoCreateFieldDefs;
 end;
 
-procedure TSnapCustomDataset.ClearCalcFields(Buffer: PChar);
+procedure TSnapCustomDataset.ClearCalcFields(Buffer: TRecordBuffer);
 begin
   FillChar(Buffer[FStartCalculated], CalcFieldsSize, 0);
 end;
 
-function TSnapCustomDataset.GetActiveRecordBuffer: PChar;
+function TSnapCustomDataset.GetActiveRecordBuffer: TRecordBuffer;
 begin
   case State of
     dsBrowse: if isEmpty then
         Result := nil
       else
-        Result := ActiveBuffer;
-    dsCalcFields: Result := CalcBuffer;
-    dsFilter: Result := TempBuffer;
-    dsEdit, dsInsert: Result := ActiveBuffer;
+        Result := TRecordBuffer(ActiveBuffer);
+    dsCalcFields: Result := TRecordBuffer(CalcBuffer);
+    dsFilter: Result := TRecordBuffer(TempBuffer);
+    dsEdit, dsInsert: Result := TRecordBuffer(ActiveBuffer);
   else
     Result := nil;
   end;
@@ -359,7 +368,7 @@ begin
   begin
     SaveState := SetTempState(dsFilter);
     try
-      RecordToBuffer(TempBuffer);
+      RecordToBuffer(TRecordBuffer(TempBuffer));
       OnFilterRecord(Self, Result);
     except
       if Assigned(Classes.ApplicationHandleException) then
@@ -372,7 +381,7 @@ begin
   end;
 end;
 
-function TSnapCustomDataset.GetRecord(Buffer: PChar; GetMode: TGetMode; DoCheck: Boolean): TGetResult;
+function TSnapCustomDataset.GetRecord(Buffer: TRecordBuffer; GetMode: TGetMode; DoCheck: Boolean): TGetResult;
 var
   localAccept : boolean;
 begin
@@ -482,7 +491,7 @@ We cannot just fill the buffer with 0s since that would overwrite our BLOB point
 Therefore we free the blob pointers first, then fill the buffer with zeros, then
 reallocate the blob pointers}
 
-procedure TSnapCustomDataset.InternalInitRecord(Buffer: PChar);
+procedure TSnapCustomDataset.InternalInitRecord(Buffer: TRecordBuffer);
 begin
   FreeRecordPointers(Buffer);
   FillChar(Buffer^, GetRecordSize, 0);
@@ -527,7 +536,7 @@ begin
   DoAfterSetFieldValue(True);
 end;
 
-procedure TSnapCustomDataset.InternalSetToRecord(Buffer: PChar);
+procedure TSnapCustomDataset.InternalSetToRecord(Buffer: TRecordBuffer);
 begin
   if GetBookmarkFlag(Buffer) in [bfCurrent, bfInserted] then
     GotoRecordID(PRecordInfo(Buffer + GetDataSize)^.RecordID);
@@ -567,7 +576,7 @@ begin
     end;
 end;
 
-procedure TSnapCustomDataset.BufferToRecord(Buffer: PChar);
+procedure TSnapCustomDataset.BufferToRecord(Buffer: TRecordBuffer);
 var
   TempStr: string;
   TempInt: Integer;
@@ -649,7 +658,7 @@ begin
     end;
 end;
 
-procedure TSnapCustomDataset.RecordToBuffer(Buffer: PChar);
+procedure TSnapCustomDataset.RecordToBuffer(Buffer: TRecordBuffer);
 var
   Value: Variant;
   TempStr: string;
@@ -758,8 +767,8 @@ end;
 
 function TSnapCustomDataset.GetFieldData(Field: TField; Buffer: Pointer): Boolean;
 var
-  RecBuffer: PChar;
-  pSrc, pDst: PChar;
+  RecBuffer: TRecordBuffer;
+  pSrc, pDst: TRecordBuffer;
   Offset: Integer;
 begin
   Result := false;
@@ -778,11 +787,15 @@ begin
   if (Field.FieldKind = fkCalculated) or (Field.FieldKind = fkLookup) then
     begin
       inc(RecBuffer, FStartCalculated + Field.Offset);
-      if (RecBuffer[0] = #0) or (Buffer = nil) then
+      if (Byte(RecBuffer^) = 0) or (Buffer = nil) then
         exit
       else
-        Move(Buffer^, RecBuffer[1], Field.DataSize);
+      begin
+        pDst := RecBuffer;
+        Inc(pDst);
+        Move(Buffer^, pDst^, Field.DataSize);
         //CopyMemory(Buffer, @RecBuffer[1], Field.DataSize);
+      end;
     end
   else
   begin
@@ -806,7 +819,7 @@ begin
         end;
     end;
     *)
-    pDst := pchar(Buffer);
+    pDst := TRecordBuffer(Buffer);
     pSrc := (RecBuffer + Offset);
     case Field.DataType of
       ftDataset: Move(pSrc^, pDst^, Sizeof(TObject));
@@ -820,8 +833,8 @@ end;
 procedure TSnapCustomDataset.SetFieldData(Field: TField; Buffer: Pointer);
 var
   Offset: Integer;
-  pSrc, pDst: PChar;
-  RecBuffer: Pchar;
+  pSrc, pDst: TRecordBuffer;
+  RecBuffer: TRecordBuffer;
 begin
   if not Active then
     exit;
@@ -833,10 +846,14 @@ begin
   if (Field.FieldKind = fkCalculated) or (Field.FieldKind = fkLookup) then
     begin
       Inc(RecBuffer, FStartCalculated + Field.Offset);
-      Boolean(RecBuffer[0]) := (Buffer <> nil);
-      if Boolean(RecBuffer[0]) then
-        Move(RecBuffer[1], Buffer^, Field.DataSize);
+      Boolean(RecBuffer^) := (Buffer <> nil);
+      if Boolean(RecBuffer^) then
+      begin
+        pSrc := RecBuffer;
+        Inc(pSrc);
+        Move(pSrc^, Buffer^, Field.DataSize);
         //CopyMemory(@RecBuffer[1], Buffer, Field.DataSize);
+      end;
     end
   else
     begin
@@ -860,7 +877,7 @@ begin
         ftFloat, ftCurrency: Move(Double(Buffer^), (RecBuffer + Offset)^, sizeof(Double));
       end;
       *)
-      pSrc := pchar(Buffer);
+      pSrc := TRecordBuffer(Buffer);
       pDst := (RecBuffer + Offset);
       case Field.DataType of
         ftDataset: Move(pSrc^, pDst^, Sizeof(TObject));
@@ -878,25 +895,25 @@ begin
   Result := 0;
 end;
 
-procedure TSnapCustomDataset.GetBookmarkData(Buffer: PChar; Data: Pointer);
+procedure TSnapCustomDataset.GetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
 begin
   if BookMarkSize > 0 then
     AllocateBookMark(PRecordInfo(Buffer + GetDataSize)^.RecordID, Data);
 end;
 
-function TSnapCustomDataset.GetBookmarkFlag(Buffer: PChar): TBookmarkFlag;
+function TSnapCustomDataset.GetBookmarkFlag(Buffer: TRecordBuffer): TBookmarkFlag;
 begin
   Result := PRecordInfo(Buffer + GetDataSize)^.BookMarkFlag;
 end;
 
-procedure TSnapCustomDataset.SetBookmarkData(Buffer: PChar; Data: Pointer);
+procedure TSnapCustomDataset.SetBookmarkData(Buffer: TRecordBuffer; Data: Pointer);
 begin
   if PRecordInfo(Buffer + GetDataSize)^.BookMark = nil then
     GetMem(PRecordInfo(Buffer + GetDataSize)^.BookMark, GetBookMarkSize);
   Move(PRecordInfo(Buffer + GetDataSize)^.BookMark^, Data, GetBookMarkSize);
 end;
 
-procedure TSnapCustomDataset.SetBookmarkFlag(Buffer: PChar; Value: TBookmarkFlag);
+procedure TSnapCustomDataset.SetBookmarkFlag(Buffer: TRecordBuffer; Value: TBookmarkFlag);
 begin
   PRecordInfo(Buffer + GetDataSize)^.BookMarkFlag := Value;
 end;
@@ -1011,7 +1028,7 @@ begin
   inherited SetDataSetField(Value);
 end;
 
-procedure TSnapCustomDataset.DataEvent(Event: TDataEvent; Info: LongInt);
+procedure TSnapCustomDataset.DataEvent(Event: TDataEvent; Info: PtrInt);
 begin
   if Event = deParentScroll then
   begin
@@ -1137,7 +1154,7 @@ procedure TSnapBlobStream.LoadBlobData;
 var
   Stream: TMemoryStream;
   Offset: Integer;
-  RecBuffer: PChar;
+  RecBuffer: TRecordBuffer;
 begin
   Self.Size := 0;
   RecBuffer := FDataset.GetActiveRecordBuffer;
@@ -1154,7 +1171,7 @@ procedure TSnapBlobStream.SaveBlobData;
 var
   Stream: TMemoryStream;
   Offset: Integer;
-  RecBuffer: Pchar;
+  RecBuffer: TRecordBuffer;
 begin
   RecBuffer := FDataset.GetActiveRecordBuffer;
   if RecBuffer <> nil then
@@ -1278,7 +1295,7 @@ end;
 
 function TSnapCustonIndexedDataset.GetRecNo: Integer;
 var
-  RecBuf: PChar;
+  RecBuf: TRecordBuffer;
 begin
 (*
   UpdateCursorPos;
@@ -1352,7 +1369,7 @@ var
   FieldCount: Integer;
   OldIdx: Integer;
   Index: Integer;
-  Buffer: pChar;
+  Buffer: TRecordBuffer;
 
   function MatchFieldValue(Field: TField; Value: Variant; Options: TLocateOptions): Boolean;
   var
@@ -1394,7 +1411,7 @@ begin
     // use filter state to provide temporary buffer for record matching
     OldIdx := fCurrent;
     SetTempState( dsFilter );
-    Buffer := TempBuffer();
+    Buffer := TRecordBuffer(TempBuffer());
     try
       InternalFirst;
 
