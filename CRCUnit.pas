@@ -1,4 +1,20 @@
-{ Sergey Bodrov (serbod@gmail.com) }
+(*
+
+Generic CRC8, CRC16, CRC32 calculation
+
+Usage example:
+
+var
+  DataStr: AnsiString = '123456789';
+  DataBuf: array[0..255] of Byte;
+begin
+  Result := GetCRC32(DataStr[1], Length(DataStr));
+  Result := GetCRC32(DataBuf, SizeOf(DataBuf));
+end;
+
+Sergey Bodrov (serbod@gmail.com)
+MIT License
+*)
 unit CRCUnit;
 
 interface
@@ -29,15 +45,15 @@ CRC8_ROHC           $07,  $FF,  $00,   True
 CRC8_WCDMA          $9B,  $00,  $00,   True
 }
 
-{ Return CRC8 }
-function GetCRC8(ABufPtr: PByte; ALen: Integer; APoly: Byte = $07;
+{ Returns CRC8 }
+function GetCRC8(const AData; ADataSize: Integer; APoly: Byte = $07;
   AInit: Byte = $00; AFinal: Byte = $00; AReflect: Boolean = False): Byte;
 
 { Calculate CRC8 lookup table }
-procedure FillCRC8Table(var ATable: TCRC8Table; APoly: Byte = $07; AReflect: Boolean = False);
+procedure FillCRC8Table(out ATable: TCRC8Table; APoly: Byte = $07; AReflect: Boolean = False);
 
 { Get CRC8 using pre-calculated lookup table }
-function GetCRC8Fast(ABufPtr: PByte; ALen: Integer; const ATable: TCRC8Table;
+function GetCRC8Fast(const AData; ADataSize: Integer; const ATable: TCRC8Table;
   AInit: Byte = $00; AFinal: Byte = $00): Byte;
 
 { CRC16 parameters:
@@ -45,6 +61,7 @@ Name                Poly   Init   Final  Reflect
 ------------------------------------------------
 CRC16_CCIT_ZERO     $1021, $0000, $0000, False
 CRC16_ARC           $8005, $0000, $0000, True
+CRC16_IBM           $8005, $0000, $0000, True
 CRC16_CCITT_AUG     $1021, $1D0F, $0000, False
 CRC16_BUYPASS       $8005, $0000, $0000, False
 CRC16_CCITT_FALSE   $1021, $FFFF, $0000, False
@@ -69,15 +86,14 @@ CRC16_X_25          $1021, $FFFF, $FFFF, True
 CRC16_XMODEM        $1021, $0000, $0000, False
 }
 
-{ CRC16 }
-function GetCRC16(ABufPtr: PByte; ALen: Integer; APoly: Word = $1021;
+{ Returns CRC16 }
+function GetCRC16(const AData; ADataSize: Integer; APoly: Word = $1021;
   AInit: Word = $0000; AFinal: Word = $0000; AReflect: Boolean = False): Word;
 
 { Calculate CRC16 lookup table }
-procedure FillCRC16Table(var ATable: TCRC16Table; APoly: Word = $1021; AReflect: Boolean = False);
-
+procedure FillCRC16Table(out ATable: TCRC16Table; APoly: Word = $1021; AReflect: Boolean = False);
 { Get CRC16 using pre-calculated lookup table }
-function GetCRC16Fast(ABufPtr: PByte; ALen: Integer; const ATable: TCRC16Table;
+function GetCRC16Fast(const AData; ADataSize: Integer; const ATable: TCRC16Table;
   AInit: Word = $0000; AFinal: Word = $0000; AReflect: Boolean = False): Word;
 
 { CRC32 parameters
@@ -94,22 +110,26 @@ CRC32_JAMCRC        $04C11DB7, $FFFFFFFF, $00000000, True
 CRC32_XFER          $000000AF, $00000000, $00000000, False
 }
 
+{ Returns CRC32 }
+function GetCRC32(const AData; ADataSize: Integer; APoly: LongWord = $04C11DB7;
+  AInitCRC: LongWord = $FFFFFFFF; AFinal: LongWord = $FFFFFFFF; AReflect: Boolean = True): LongWord;
+
 { Calculate CRC32 lookup table }
 procedure CRC32Init(APoly: LongWord = $04C11DB7; AReflect: Boolean = True);
 { Returns CRC32 by IEEE 802.3 standard }
-function GetCRC32Fast(ABufPtr: PByte; ALen: Integer;
-  AInitCRC: LongWord = $FFFFFFFF; AFinal: LongWord = $FFFFFFFF): LongWord;
+function GetCRC32Fast(const AData; ADataSize: Integer;
+  AInitCRC: LongWord = $FFFFFFFF; AFinal: LongWord = $FFFFFFFF; AReflect: Boolean = True): LongWord;
 
 { CRC32, for STM32 controllers. Attention! Len must be a multiple of 4
   It named Reverse by mistake, in legacy code }
 function GetCRC32Reverse(ABufPtr: PLongWord; ALen: Integer; AInitCRC: LongWord = $FFFFFFFF): LongWord;
 
+var
+  CRC32Table: TCRC32Table;
 
 
 implementation
 
-var
-  CRC32Table: TCRC32Table;
 
 function BitFlip(B: Byte): Byte;
 const
@@ -128,93 +148,22 @@ begin
   Result := A;
 end;
 
-function GetCRC32Fast(ABufPtr: PByte; ALen: Integer;
-  AInitCRC: LongWord; AFinal: LongWord): LongWord;
-var
-  i: Integer;
-begin
-  Result := AInitCRC;
-  for i := 0 to ALen - 1 do
-  begin
-    Result := (Result shr 8) xor CRC32Table[Byte(Result) xor ABufPtr^];
-    Inc(ABufPtr);
-  end;
-  Result := Result xor AFinal;
-end;
-
-function GetCRC32Reverse(ABufPtr: PLongWord; ALen: Integer; AInitCRC: LongWord): LongWord;
-var
-  i, j: Integer;
-begin
-  Result := AInitCRC;
-  i := 0;
-  repeat
-    Result := Result xor ABufPtr^;
-    Inc(ABufPtr);
-    for j := 1 to 32 do
-    begin
-      if (Result and $80000000) <> 0 then
-        Result := (Result shl 1) xor $04C11DB7
-      else
-        Result := (Result shl 1);
-    end;
-    Inc(i, 4);
-  until i >= ALen;
-end;
-
-procedure CRC32Init(APoly: LongWord; AReflect: Boolean);
-var
-  c: LongWord;
-  i, ii: integer;
-begin
-  if AReflect then
-  begin
-    APoly := BitFlipLongWord(APoly);
-    for i := Low(Byte) to High(Byte) do
-    begin
-      c := i;
-      for ii := 1 to 8 do
-      begin
-        if (c and $1) <> 0 then
-          c := (c shr 1) xor APoly
-        else
-          c := (c shr 1);
-      end;
-      CRC32Table[i] := c;
-    end;
-  end
-  else
-  begin
-    for i := Low(Byte) to High(Byte) do
-    begin
-      c := LongWord(i) shl 8;
-      for ii := 1 to 8 do
-      begin
-        if (c and $80000000) <> 0 then
-          c := (c shl 1) xor APoly
-        else
-          c := (c shl 1);
-      end;
-      CRC32Table[i] := c;
-    end;
-
-  end;
-end;
-
-function GetCRC8(ABufPtr: PByte; ALen: Integer; APoly: Byte; AInit: Byte; AFinal: Byte;
+function GetCRC8(const AData; ADataSize: Integer; APoly: Byte; AInit: Byte; AFinal: Byte;
   AReflect: Boolean): Byte;
 var
+  BufPtr: PByte;
   i: Integer;
 begin
+  BufPtr := PByte(Addr(AData));
   Result := AInit;
   if AReflect then
   begin
     APoly := BitFlip(APoly);
-    while ALen > 0 do
+    while ADataSize > 0 do
     begin
-      Dec(ALen);
-      Result := Result xor ABufPtr^;
-      Inc(ABufPtr);
+      Dec(ADataSize);
+      Result := Result xor BufPtr^;
+      Inc(BufPtr);
       for i := 0 to 7 do
       begin
         if (Result and $01) <> 0 then
@@ -226,11 +175,11 @@ begin
   end
   else
   begin
-    while ALen > 0 do
+    while ADataSize > 0 do
     begin
-      Dec(ALen);
-      Result := Result xor ABufPtr^;
-      Inc(ABufPtr);
+      Dec(ADataSize);
+      Result := Result xor BufPtr^;
+      Inc(BufPtr);
       for i := 0 to 7 do
       begin
         if (Result and $80) <> 0 then
@@ -243,7 +192,7 @@ begin
   Result := Result xor AFinal;
 end;
 
-procedure FillCRC8Table(var ATable: TCRC8Table; APoly: Byte; AReflect: Boolean);
+procedure FillCRC8Table(out ATable: TCRC8Table; APoly: Byte; AReflect: Boolean);
 var
   i, ii, c: Byte;
 begin
@@ -280,49 +229,38 @@ begin
   end;
 end;
 
-function GetCRC8Fast(ABufPtr: PByte; ALen: Integer; const ATable: TCRC8Table;
+function GetCRC8Fast(const AData; ADataSize: Integer; const ATable: TCRC8Table;
   AInit: Byte; AFinal: Byte): Byte;
+var
+  BufPtr: PByte;
 begin
+  BufPtr := PByte(Addr(AData));
   Result := AInit;
-  while ALen > 0 do
+  while ADataSize > 0 do
   begin
-    Dec(ALen);
-    Result := ATable[ABufPtr^ xor Result];
-    Inc(ABufPtr);
+    Dec(ADataSize);
+    Result := ATable[BufPtr^ xor Result];
+    Inc(BufPtr);
   end;
   Result := Result xor AFinal;
 end;
 
-function GetCRC16(ABufPtr: PByte; ALen: Integer; APoly, AInit, AFinal: Word;
+function GetCRC16(const AData; ADataSize: Integer; APoly, AInit, AFinal: Word;
   AReflect: Boolean): Word;
 var
+  BufPtr: PByte;
   i: Integer;
 begin
+  BufPtr := PByte(Addr(AData));
   Result := AInit;
   if AReflect then
   begin
     APoly := BitFlip(Byte(APoly shr 8)) or (Word(BitFlip(Byte(APoly))) shl 8);
-    while ALen > 0 do
+    while ADataSize > 0 do
     begin
-      Dec(ALen);
-      Result := Result xor (Word(ABufPtr^) shl 8);
-      Inc(ABufPtr);
-      for i := 0 to 7 do
-      begin
-        if (Result and $8000) <> 0 then
-          Result := (((Result and $7FFF) shl 1) xor APoly)
-        else
-          Result := (Result shl 1);
-      end;
-    end;
-  end
-  else
-  begin
-    while ALen > 0 do
-    begin
-      Dec(ALen);
-      Result := Result xor (Word(ABufPtr^) shl 8);
-      Inc(ABufPtr);
+      Dec(ADataSize);
+      Result := Result xor Word(BufPtr^ and $FF);
+      Inc(BufPtr);
       for i := 0 to 7 do
       begin
         if (Result and $0001) <> 0 then
@@ -331,11 +269,27 @@ begin
           Result := (Result shr 1);
       end;
     end;
+  end
+  else
+  begin
+    while ADataSize > 0 do
+    begin
+      Dec(ADataSize);
+      Result := Result xor (Word(BufPtr^ and $FF) shl 8);
+      Inc(BufPtr);
+      for i := 0 to 7 do
+      begin
+        if (Result and $8000) <> 0 then
+          Result := (((Result and $7FFF) shl 1) xor APoly)
+        else
+          Result := (Result shl 1);
+      end;
+    end;
   end;
   Result := Result xor AFinal;
 end;
 
-procedure FillCRC16Table(var ATable: TCRC16Table; APoly: Word; AReflect: Boolean);
+procedure FillCRC16Table(out ATable: TCRC16Table; APoly: Word; AReflect: Boolean);
 var
   i, ii: Byte;
   c: Word;
@@ -373,29 +327,164 @@ begin
   end;
 end;
 
-function GetCRC16Fast(ABufPtr: PByte; ALen: Integer; const ATable: TCRC16Table;
+function GetCRC16Fast(const AData; ADataSize: Integer; const ATable: TCRC16Table;
   AInit: Word; AFinal: Word; AReflect: Boolean): Word;
+var
+  BufPtr: PByte;
 begin
+  BufPtr := PByte(Addr(AData));
   Result := AInit;
   if AReflect then
   begin
-    while ALen > 0 do
+    while ADataSize > 0 do
     begin
-      Dec(ALen);
-      Result := (Result shr 8) xor ATable[Byte(ABufPtr^ xor Result)];
-      Inc(ABufPtr);
+      Dec(ADataSize);
+      Result := (Result shr 8) xor ATable[Byte(BufPtr^ xor Result)];
+      Inc(BufPtr);
     end;
   end
   else
   begin
-    while ALen > 0 do
+    while ADataSize > 0 do
     begin
-      Dec(ALen);
-      Result := (Result shl 8) xor ATable[ABufPtr^ xor Byte(Result shr 8)];
-      Inc(ABufPtr);
+      Dec(ADataSize);
+      Result := (Result shl 8) xor ATable[BufPtr^ xor Byte(Result shr 8)];
+      Inc(BufPtr);
     end;
   end;
   Result := Result xor AFinal;
+end;
+
+procedure CRC32Init(APoly: LongWord; AReflect: Boolean);
+var
+  c: LongWord;
+  i, ii: integer;
+begin
+  if AReflect then
+  begin
+    APoly := BitFlipLongWord(APoly);
+    for i := Low(Byte) to High(Byte) do
+    begin
+      c := i;
+      for ii := 1 to 8 do
+      begin
+        if (c and $1) <> 0 then
+          c := (c shr 1) xor APoly
+        else
+          c := (c shr 1);
+      end;
+      CRC32Table[i] := c;
+    end;
+  end
+  else
+  begin
+    for i := Low(Byte) to High(Byte) do
+    begin
+      c := LongWord(i) shl 24;
+      for ii := 1 to 8 do
+      begin
+        if (c and $80000000) <> 0 then
+          c := ((c and $7FFFFFFF) shl 1) xor APoly
+        else
+          c := (c shl 1);
+      end;
+      CRC32Table[i] := c;
+    end;
+
+  end;
+end;
+
+function GetCRC32Fast(const AData; ADataSize: Integer;
+  AInitCRC: LongWord; AFinal: LongWord; AReflect: Boolean): LongWord;
+var
+  BufPtr: PByte;
+begin
+  BufPtr := PByte(Addr(AData));
+  Result := AInitCRC;
+  if AReflect then
+  begin
+    while ADataSize > 0 do
+    begin
+      Dec(ADataSize);
+      Result := (Result shr 8) xor CRC32Table[BufPtr^ xor Byte(Result)];
+      Inc(BufPtr);
+    end;
+  end
+  else
+  begin
+    while ADataSize > 0 do
+    begin
+      Dec(ADataSize);
+      Result := ((Result and $00FFFFFF) shl 8) xor CRC32Table[Byte((Result xor (BufPtr^ shl 24)) shr 24)];
+      Inc(BufPtr);
+    end;
+  end;
+  Result := Result xor AFinal;
+end;
+
+function GetCRC32(const AData; ADataSize: Integer; APoly: LongWord;
+  AInitCRC: LongWord; AFinal: LongWord; AReflect: Boolean = True): LongWord;
+var
+  BufPtr: PByte;
+  i: Integer;
+begin
+  BufPtr := PByte(Addr(AData));
+  Result := AInitCRC;
+  if AReflect then
+  begin
+    APoly := BitFlipLongWord(APoly);
+    while ADataSize > 0 do
+    begin
+      Dec(ADataSize);
+      Result := Result xor BufPtr^;
+      Inc(BufPtr);
+      for i := 1 to 8 do
+      begin
+        if (Result and $00000001) <> 0 then
+          Result := (Result shr 1) xor APoly
+        else
+          Result := (Result shr 1);
+      end;
+    end;
+  end
+  else
+  begin
+    while ADataSize > 0 do
+    begin
+      Dec(ADataSize);
+      Result := Result xor (BufPtr^ shl 24);
+      Inc(BufPtr);
+      for i := 1 to 8 do
+      begin
+        if (Result and $80000000) <> 0 then
+          Result := ((Result and $7FFFFFFF) shl 1) xor APoly
+        else
+          Result := (Result shl 1);
+      end;
+    end;
+  end;
+  Result := Result xor AFinal;
+end;
+
+
+function GetCRC32Reverse(ABufPtr: PLongWord; ALen: Integer; AInitCRC: LongWord): LongWord;
+var
+  i, j: Integer;
+begin
+  Result := AInitCRC;
+  i := 0;
+  repeat
+    Result := Result xor ABufPtr^;
+    Inc(ABufPtr);
+    for j := 1 to 32 do
+    begin
+      if (Result and $80000000) <> 0 then
+        Result := (Result shl 1) xor $04C11DB7
+      else
+        Result := (Result shl 1);
+    end;
+    Inc(i, 4);
+  until i >= ALen;
 end;
 
 
