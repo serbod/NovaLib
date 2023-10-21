@@ -28,7 +28,7 @@ unit VarDicts;
 
 interface
 
-uses Variants, VarUtils;
+uses Variants, VarUtils{?};
 
 type
 
@@ -36,8 +36,11 @@ type
 
   TVarDictType = class(TInvokeableVariantType)
   private
-    procedure VarDerefAndCopy(const V: TVarData);
-    function InternalSetProperty(const V: TVarData; const Name: string; const Value: TVarData): Boolean;
+    procedure VarDerefAndCopy(V: PVarData);
+  protected
+    function LeftPromotion(const V: TVarData; const Operation: TVarOp;
+      out RequiredVarType: TVarType): Boolean; override;
+    function SetPropertyInternal(const V: TVarData; const Name: string; const Value: TVarData): Boolean;
   public
     function IsClear(const V: TVarData): Boolean; override;
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
@@ -56,6 +59,8 @@ type
 
   function VarDictCreate(): Variant;
   function VarTypeDict(): TVarType;
+  function VarDictAsStr(const V: Variant): string;
+  function VarIsDict(const V: Variant): Boolean;
 
 var
   VarDictCaseSensitive: Boolean;
@@ -73,6 +78,7 @@ type
 
   TVariantDictionary = class
   public
+    RefCount: Integer; // 0 - only one owner
     Items: TVariantDictionaryItemArray;
     ItemsCount: Integer;
 
@@ -86,6 +92,7 @@ type
 
     function GetCount(): Integer;
     function AsString(): string;
+    procedure Assign(ASource: TVariantDictionary);
   end;
 
   TVarDictData = packed record
@@ -111,6 +118,19 @@ begin
   TVarDictData(Result).VDict := TVariantDictionary.Create();
 end;
 
+function VarDictAsStr(const V: Variant): string;
+begin
+  if TVarDictData(V).VType = VarTypeDict then
+    Result := TVarDictData(V).VDict.AsString
+  else
+    Result := VarToStrDef(V, '');
+end;
+
+function VarIsDict(const V: Variant): Boolean;
+begin
+  Result := (not VarIsNull(V)) and (TVarDictData(V).VType = VarTypeDict);
+end;
+
 { TVariantDictionaryType }
 
 procedure TVarDictType.Clear(var V: TVarData);
@@ -122,11 +142,16 @@ begin
   pVarDict := Addr(V);
   if pVarDict^.VDict <> nil then
   begin
-    for i := pVarDict^.VDict.ItemsCount-1 downto 0 do
-      VarDataClear(pVarDict^.VDict.Items[i].Value);
+    if pVarDict^.VDict.RefCount > 0 then
+      Dec(pVarDict^.VDict.RefCount)
+    else
+    begin
+      for i := pVarDict^.VDict.ItemsCount-1 downto 0 do
+        VarDataClear(pVarDict^.VDict.Items[i].Value);
 
-    pVarDict^.VDict.Free();
-    pVarDict^.VDict := nil;
+      pVarDict^.VDict.Free();
+      pVarDict^.VDict := nil;
+    end;
   end;
 end;
 
@@ -135,21 +160,32 @@ begin
   Result := (TVarDictData(V).VDict = nil) or (TVarDictData(V).VDict.GetCount() = 0);
 end;
 
+function TVarDictType.LeftPromotion(const V: TVarData; const Operation: TVarOp;
+  out RequiredVarType: TVarType): Boolean;
+begin
+  // not need to cast left argument of BinaryOp to this type
+  Result := False;
+end;
+
 procedure TVarDictType.Copy(var Dest: TVarData;
   const Source: TVarData; const Indirect: Boolean);
 var
   i: Integer;
 begin
   if Indirect and VarDataIsByRef(Source) then
-    VarDataCopyNoInd(Dest, Source)
+  begin
+    {$ifdef FPC}
+    VarDataCopyNoInd(Dest, Source);
+    {$else}
+    VariantCopy(Dest, Source);
+    {$endif}
+  end
   else
   begin
     TVarDictData(Dest).VType := VarType;
-    TVarDictData(Dest).VDict := TVariantDictionary.Create();
-    for i := 0 to TVarDictData(Source).VDict.ItemsCount - 1 do
-    begin
-      InternalSetProperty(Dest, TVarDictData(Source).VDict.Items[i].Name, TVarDictData(Source).VDict.Items[i].Value);
-    end;
+    // reference to source
+    TVarDictData(Dest).VDict := TVarDictData(Source).VDict;
+    Inc(TVarDictData(Source).VDict.RefCount);
   end;
 end;
 
@@ -171,12 +207,21 @@ begin
   else
   if (sName = 'GETVALUE') and (Length(Arguments) = 1) then
   begin
-    i := Variant(Arguments[0]);
+    if VarDataIsOrdinal(Arguments[0]) then
+      i := Variant(Arguments[0])
+    else
+      i := TVarDictData(V).VDict.GetNameIndex(Variant(Arguments[0]));
     if (i >= 0) and (i < TVarDictData(V).VDict.ItemsCount) then
     begin
+      {$ifdef FPC}
       VarDataCopy(Dest, TVarDictData(V).VDict.Items[i].Value);
-      Result := True;
-    end;
+      {$else}
+      VariantCopy(Dest, TVarDictData(V).VDict.Items[i].Value);
+      {$endif}
+    end
+    else
+      Variant(Dest) := Null;
+    Result := True;
   end
   else
   if (sName = 'GETNAME') and (Length(Arguments) = 1) then
@@ -186,7 +231,9 @@ begin
     begin
       VarDataFromStr(Dest, TVarDictData(V).VDict.Items[i].Name);
       Result := True;
-    end;
+    end
+    else
+      VarRangeCheckError(VarType);
   end
   else
   if (sName = 'GETNAMEINDEX') and (Length(Arguments) = 1) then
@@ -201,7 +248,7 @@ function TVarDictType.DoProcedure(const V: TVarData; const Name: string;
 begin
   if (UpperCase(Name) = 'SETVALUE') and (Length(Arguments) = 2) then
   begin
-    Result := InternalSetProperty(V, Variant(Arguments[0]), Arguments[1]);
+    Result := SetPropertyInternal(V, Variant(Arguments[0]), Arguments[1]);
   end
   else
     Result := False;
@@ -229,25 +276,30 @@ end;
 function TVarDictType.SetProperty({$ifdef FPC}var{$else}const{$endif} V: TVarData;
   const Name: string; const Value: TVarData): Boolean;
 begin
-  Result := InternalSetProperty(V, Name, Value);
+  Result := SetPropertyInternal(V, Name, Value);
 end;
 
-function TVarDictType.InternalSetProperty(const V: TVarData;
+function TVarDictType.SetPropertyInternal(const V: TVarData;
   const Name: string; const Value: TVarData): Boolean;
 var
   i: Integer;
+  pValue: PVarData;
 begin
   Result := True;
-
-  if (TVarData(V).VType and varByRef) <> 0 then
-    VarDerefAndCopy(V);
+  VarDerefAndCopy(@V);
 
   i := TVarDictData(V).VDict.GetNameIndex(Name, True);
+  // deref and clone Value, invoke Value.Copy()
+  // dereference VarData
+  pValue := @Value;
+  while pValue^.vType = (varVariant or varByRef) do
+    pValue := PVarData(pValue^.vPointer);
   {$ifdef FPC}
-  VarDataCopy(TVarDictData(V).VDict.Items[i].Value, Value);
+  VarDataCopyNoInd(TVarDictData(V).VDict.Items[i].Value, pValue^);
   {$else}
-  VariantCopy(TVarDictData(V).VDict.Items[i].Value, Value);
+  VarDataCopyNoInd(TVarDictData(V).VDict.Items[i].Value, Value);
   {$endif}
+  //VarCopyNoInd(Variant(TVarDictData(V).VDict.Items[i].Value), Variant(Value));
 end;
 
 procedure TVarDictType.Cast(var Dest: TVarData; const Source: TVarData);
@@ -297,14 +349,32 @@ begin
       begin
         for i := 0 to TVarDictData(Right).VDict.ItemsCount - 1 do
         begin
-          InternalSetProperty(Left, TVarDictData(Right).VDict.Items[i].Name, TVarDictData(Right).VDict.Items[i].Value);
+          SetProperty(Left, TVarDictData(Right).VDict.Items[i].Name, TVarDictData(Right).VDict.Items[i].Value);
         end;
+      end
+      else
+      if VarIsStr(Variant(Left)) and (Right.VType = VarTypeDict) then
+      begin
+        Variant(Left) := Variant(Left) + TVarDictData(Right).VDict.AsString();
       end
       else
         inherited BinaryOp(Left, Right, Operation);
     end;
   else
     inherited BinaryOp(Left, Right, Operation);
+  end;
+end;
+
+procedure TVarDictType.VarDerefAndCopy(V: PVarData);
+var
+  PrevVDict: TVariantDictionary;
+begin
+  PrevVDict := TVarDictData(V^).VDict;
+  if PrevVDict.RefCount > 0 then
+  begin
+    TVarDictData(V^).VDict := TVariantDictionary.Create();
+    TVarDictData(V^).VDict.Assign(PrevVDict);
+    Dec(PrevVDict.RefCount);
   end;
 end;
 
@@ -378,6 +448,32 @@ begin
   end;
 end;
 
+procedure TVariantDictionary.Assign(ASource: TVariantDictionary);
+var
+  i: Integer;
+  pValue: PVarData;
+begin
+  ItemsCount := ASource.ItemsCount;
+  SetLength(Items, ItemsCount);
+  // copy values
+  for i := 0 to ItemsCount - 1 do
+  begin
+    Items[i].Name := ASource.Items[i].Name;
+    Items[i].Value.VType := varEmpty;
+    // dereference source value
+    pValue := Addr(ASource.Items[i].Value);
+    while pValue^.vType = (varVariant or varByRef) do
+      pValue := PVarData(pValue^.vPointer);
+    //SetProperty(Items[i].Value, ASource.Items[i].Name, ASource.Items[i].Value);
+    //{$ifdef FPC}
+    //VarDataCopy(Items[i].Value, ASource.Items[i].Value);
+    //{$else}
+    //VarCopyNoInd(Variant(Items[i].Value), Variant(ASource.Items[i].Value)); // deref and clone Value, invoke Value.Copy()
+    VarDictType.VarDataCopyNoInd(Items[i].Value, pValue^);
+    //{$endif}
+  end;
+end;
+
 function TVariantDictionary.AsString: string;
 var
   i: Integer;
@@ -387,14 +483,15 @@ begin
   begin
     if i > 0 then
       Result := Result + ',';
-    Result := Result + Items[i].Name + ':' + VarToStr(Variant(Items[i].Value));
+    Result := Result + Items[i].Name + ':';
+    try
+      Result := Result + VarToStr(Variant(Items[i].Value));
+    except
+      // not converted to string
+      Result := Result + VarTypeAsText(VarType(Variant(Items[i].Value))); // !!!
+    end;
   end;
   Result := Result + '}';
-end;
-
-procedure TVarDictType.VarDerefAndCopy(const V: TVarData);
-begin
-// todo: write-on-copy
 end;
 
 initialization
