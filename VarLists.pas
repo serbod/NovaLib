@@ -24,13 +24,22 @@ unit VarLists;
 
 interface
 
-uses Variants;
+uses Variants, VarUtils;
 
 type
+
+  { TVarListType }
+
   TVarListType = class(TInvokeableVariantType)
+  private
+    procedure VarDerefAndCopy(V: PVarData);
+  protected
+    function LeftPromotion(const V: TVarData; const Operation: TVarOp;
+      out RequiredVarType: TVarType): Boolean; override;
   public
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
+    procedure BinaryOp(var Left: TVarData; const Right: TVarData; const Operation: TVarOp); override;
     procedure Clear(var V: TVarData); override;
     procedure Copy(var Dest: TVarData; const Source: TVarData; const Indirect: Boolean); override;
     function DoFunction(var Dest: TVarData; const V: TVarData;
@@ -41,6 +50,8 @@ type
 
   function VarListCreate(): Variant;
   function VarTypeList(): TVarType;
+  function VarIsList(const V: Variant): Boolean;
+  function VarListAsStr(const V: Variant): string;
 
 implementation
 
@@ -50,10 +61,10 @@ type
   TVariantListItemArray = array of TVarData;
 
   TVariantList = class
-  private
-    FItems: TVariantListItemArray;
-    FItemsCount: Integer;
   public
+    Items: TVariantListItemArray;
+    ItemsCount: Integer;
+    RefCount: Integer;
     procedure AfterConstruction; override;
     procedure BeforeDestruction; override;
 
@@ -61,11 +72,9 @@ type
     function GetValue(AIndex: Integer; var AValue: TVarData): Boolean;
     procedure SetValue(AIndex: Integer; const AValue: TVarData);
     procedure AddValue(const AValue: TVarData);
-    procedure CopyTo(ADest: TVariantList);
+    procedure Assign(ASource: TVariantList);
 
-    function GetCount(): Integer;
     function AsString(): string;
-    property Items: TVariantListItemArray read FItems;
   end;
 
   TVarListData = packed record
@@ -90,6 +99,19 @@ begin
   TVarListData(Result).VList := TVariantList.Create();
 end;
 
+function VarIsList(const V: Variant): Boolean;
+begin
+  Result := (not VarIsNull(V)) and (TVarListData(V).VType = VarTypeList);
+end;
+
+function VarListAsStr(const V: Variant): string;
+begin
+  if TVarListData(V).VType = VarTypeList then
+    Result := TVarListData(V).VList.AsString
+  else
+    Result := VarToStrDef(V, '');
+end;
+
 { TVarListType }
 
 procedure TVarListType.CastTo(var Dest: TVarData; const Source: TVarData;
@@ -108,7 +130,7 @@ begin
       VarDataInit(LTemp);
       try
         LTemp.VType := varInteger;
-        LTemp.VInteger := TVarListData(Source).VList.GetCount();
+        LTemp.VInteger := TVarListData(Source).VList.ItemsCount;
         VarDataCastTo(Dest, LTemp, AVarType);
       finally
         VarDataClear(LTemp);
@@ -119,6 +141,29 @@ begin
     RaiseCastError;
 end;
 
+procedure TVarListType.BinaryOp(var Left: TVarData; const Right: TVarData;
+  const Operation: TVarOp);
+begin
+  case Operation of
+    opAdd:
+    begin
+      if (Left.VType = VarTypeList) and (Right.VType = VarTypeList) then
+      begin
+        TVarListData(Left).VList.Assign(TVarListData(Right).VList);
+      end
+      else
+      if VarIsStr(Variant(Left)) and (Right.VType = VarTypeList) then
+      begin
+        Variant(Left) := Variant(Left) + TVarListData(Right).VList.AsString();
+      end
+      else
+        inherited BinaryOp(Left, Right, Operation);
+    end;
+  else
+    inherited BinaryOp(Left, Right, Operation);
+  end;
+end;
+
 procedure TVarListType.Clear(var V: TVarData);
 var
   i: Integer;
@@ -126,11 +171,16 @@ begin
   V.VType := varEmpty;
   if TVarListData(V).VList <> nil then
   begin
-    for i := TVarListData(V).VList.GetCount()-1 downto 0 do
-      VarDataClear(TVarListData(V).VList.Items[i]);
+    if TVarListData(V).VList.RefCount > 0 then
+      Dec(TVarListData(V).VList.RefCount)
+    else
+    begin
+      for i := TVarListData(V).VList.ItemsCount-1 downto 0 do
+        VarDataClear(TVarListData(V).VList.Items[i]);
 
-    TVarListData(V).VList.Free();
-    TVarListData(V).VList := nil;
+      TVarListData(V).VList.Free();
+      TVarListData(V).VList := nil;
+    end;
   end;
 end;
 
@@ -138,12 +188,19 @@ procedure TVarListType.Copy(var Dest: TVarData;
   const Source: TVarData; const Indirect: Boolean);
 begin
   if Indirect and VarDataIsByRef(Source) then
-    VarDataCopyNoInd(Dest, Source)
+  begin
+    VarDataCopyNoInd(Dest, Source);
+  end
   else
   begin
     TVarListData(Dest).VType := VarType;
+    // reference to source
+    TVarListData(Dest).VList := TVarListData(Source).VList;
+    Inc(TVarListData(Source).VList.RefCount);
+    {Log('List.Copy() - create VList and clone data to dest');
+    TVarListData(Dest).VType := VarType;
     TVarListData(Dest).VList := TVariantList.Create();
-    TVarListData(Source).VList.CopyTo(TVarListData(Dest).VList)
+    TVarListData(Dest).VList.Assign(TVarListData(Source).VList); }
   end;
 end;
 
@@ -158,7 +215,7 @@ begin
   sName := UpperCase(Name);
   if (sName = 'GETCOUNT') then
   begin
-    Variant(Dest) := TVarListData(V).VList.GetCount();
+    Variant(Dest) := TVarListData(V).VList.ItemsCount;
     Result := True;
   end
   else
@@ -175,18 +232,22 @@ function TVarListType.DoProcedure(const V: TVarData; const Name: string;
   const Arguments: TVarDataArray): Boolean;
 var
   sName: string;
+  i: Integer;
 begin
   sName := UpperCase(Name);
   if (sName = 'SETVALUE') and (Length(Arguments) = 2) then
   begin
+    i := Variant(Arguments[0]);
     // SetValue(Index, Value)
-    TVarListData(V).VList.SetValue(Variant(Arguments[0]), Arguments[1]);
+    VarDerefAndCopy(@V);
+    TVarListData(V).VList.SetValue(i, Arguments[1]);
     Result := True;
   end
   else
   if (sName = 'ADDVALUE') and (Length(Arguments) = 1) then
   begin
     // AddValue(Value)
+    VarDerefAndCopy(@V);
     TVarListData(V).VList.AddValue(Arguments[0]);
     Result := True;
   end
@@ -194,6 +255,7 @@ begin
   if (sName = 'SETCAPACITY') and (Length(Arguments) = 1) then
   begin
     // SetCapacity(MaxCount)
+    VarDerefAndCopy(@V);
     TVarListData(V).VList.SetCapacity(Variant(Arguments[0]));
     Result := True;
   end
@@ -201,14 +263,35 @@ begin
     Result := False;
 end;
 
+function TVarListType.LeftPromotion(const V: TVarData; const Operation: TVarOp;
+  out RequiredVarType: TVarType): Boolean;
+begin
+  // not need to cast left argument of BinaryOp to this type
+  Result := False;
+end;
+
+procedure TVarListType.VarDerefAndCopy(V: PVarData);
+var
+  PrevVList: TVariantList;
+begin
+  PrevVList := TVarListData(V^).VList;
+  if PrevVList.RefCount > 0 then
+  begin
+    TVarListData(V^).VList := TVariantList.Create();
+    TVarListData(V^).VList.Assign(PrevVList);
+    Dec(PrevVList.RefCount);
+  end;
+end;
+
 { TVariantList }
 
 procedure TVariantList.AddValue(const AValue: TVarData);
 begin
-  Inc(FItemsCount);
-  if Length(FItems) < FItemsCount then
-    SetCapacity(FItemsCount + 1);
-  Variant(FItems[FItemsCount-1]) := Variant(AValue);
+  Inc(ItemsCount);
+  if Length(Items) < ItemsCount then
+    SetCapacity(ItemsCount + 1);
+  //Variant(FItems[FItemsCount-1]) := Variant(AValue);
+  SetValue(ItemsCount-1, AValue);
 end;
 
 procedure TVariantList.AfterConstruction;
@@ -222,7 +305,7 @@ var
   i: Integer;
 begin
   Result := '[';
-  for i := 0 to FItemsCount-1 do
+  for i := 0 to ItemsCount-1 do
   begin
     if i > 0 then
       Result := Result + ',';
@@ -237,27 +320,29 @@ begin
 
 end;
 
-procedure TVariantList.CopyTo(ADest: TVariantList);
+procedure TVariantList.Assign(ASource: TVariantList);
 var
   i: Integer;
 begin
-  ADest.SetCapacity(FItemsCount);
-  for i := 0 to FItemsCount-1 do
+  SetCapacity(ASource.ItemsCount);
+  ItemsCount := ASource.ItemsCount;
+  for i := 0 to ItemsCount-1 do
   begin
-    ADest.SetValue(i, FItems[i]);
+    SetValue(i, ASource.Items[i]);
   end;
-end;
-
-function TVariantList.GetCount: Integer;
-begin
-  Result := FItemsCount;
 end;
 
 function TVariantList.GetValue(AIndex: Integer; var AValue: TVarData): Boolean;
 begin
-  if AIndex < FItemsCount then
+  if AIndex < ItemsCount then
   begin
-    Variant(AValue) := Variant(FItems[AIndex]);
+    //Variant(AValue) := Variant(FItems[AIndex]);
+    //{$ifdef FPC}
+    //VarDataCopy(AValue, Items[AIndex]);
+    //{$else}
+    //VarCopyNoInd(Variant(AValue), Variant(Items[AIndex]));
+    VarListType.VarDataCopyNoInd(AValue, Items[AIndex]);
+    //{$endif}
     Result := True;
   end
   else
@@ -266,16 +351,29 @@ end;
 
 procedure TVariantList.SetCapacity(AValue: Integer);
 begin
-  SetLength(FItems, AValue);
-  if FItemsCount > AValue then
-    FItemsCount := AValue;
+  SetLength(Items, AValue);
+  if ItemsCount > AValue then
+    ItemsCount := AValue;
 end;
 
 procedure TVariantList.SetValue(AIndex: Integer; const AValue: TVarData);
+var
+  pValue: PVarData;
 begin
-  if (AIndex >= 0) and (AIndex < FItemsCount) then
+  // dereference VarData
+  pValue := @AValue;
+  while pValue^.vType = (varVariant or varByRef) do
+    pValue := PVarData(pValue^.vPointer);
+
+  if (AIndex >= 0) and (AIndex < ItemsCount) then
   begin
-    Variant(FItems[AIndex]) := Variant(AValue);
+    //Variant(FItems[AIndex]) := Variant(AValue);
+    //{$ifdef FPC}
+    //VarDataCopy(FItems[AIndex], AValue);
+    //{$else}
+    VarListType.VarDataCopyNoInd(Items[AIndex], pValue^);
+    //VarCopyNoInd(Variant(Items[AIndex]), Variant(AValue));
+    //{$endif}
   end;
 end;
 
