@@ -267,6 +267,7 @@ begin
       Exit;
     end;
     sName := ReadBencodeString(AString, APos, ALen);
+    Assert(sName <> '', 'Empty name of dict value');
     SubStorage := ReadBencodeValue(AString, APos, ALen);
     Result.SetValue(sName, SubStorage);
   end;
@@ -388,4 +389,3 @@ initialization
 DataFormatSettings.DecimalSeparator := '.';
 
 end.
-
