@@ -92,7 +92,7 @@ end;
 
 procedure TFrameTerminal.chkLogToFileChange(Sender: TObject);
 begin
-  FPrevText := '';
+  //FPrevText := '';
   FTermLogEnabled := chkLogToFile.Checked;
   if FTermLogEnabled then
   begin
@@ -131,7 +131,7 @@ var
   s: string;
   i, n: Integer;
 begin
-  s := '';
+  s := FPrevText;
   for i := 1 to Length(AText) do
   begin
     case AText[i] of
@@ -143,6 +143,24 @@ begin
   end;
   //s := StringReplace(s, #9, '  ', [rfReplaceAll]);
   s := WinCPToUTF8(s);
+  // если в конце был перевод строки, то запомним его, чтобы вставить в начало
+  // следующей строки. Чтобы следующая строка была с новой строки, а не
+  // продолжение предыдущей. TRichView игнорирует перевод строки в конце
+  FPrevText := '';
+  {if Copy(s, Length(s)-1, 2) = sLineBreak then
+    FPrevText := sLineBreak; }
+  n := Length(s);
+  while n > 0 do
+  begin
+    if s[n] in [#13, #10] then
+    begin
+      FPrevText := s[n] + FPrevText;
+      Dec(n);
+    end
+    else
+      n := 0;
+  end;
+
   {s := AText;
   SetCodePage(RawByteString(s), 1251, False);}
   rvTerm.AddText(s, FCurStyleId);
@@ -178,10 +196,10 @@ procedure TFrameTerminal.AddData(const AData: AnsiString);
 var
   i, n1, n2: Integer;
   iTextPos: Integer;
-  s: AnsiString;
+  //s: AnsiString;
   btChar: Byte;
   TmpVal: Integer;
-  c: AnsiChar;
+  //c: AnsiChar;
   StyleId: Integer;
 begin
   //AddText(AData);
@@ -190,7 +208,7 @@ begin
 
   iTextPos := 1;
   StyleId := FCurStyleId;
-  n1 := Pos(#$1B + #$5B, AData);
+  n1 := Pos(#$1B + #$5B, AData);  // ESC[
   while n1 > 0 do
   begin
     n2 := PosEx('m', AData, n1);
@@ -250,7 +268,8 @@ begin
   if FNeedRepaint then
   begin
     FNeedRepaint := False;
-    rvTerm.Repaint();
+    if Visible then
+      rvTerm.Repaint();
   end;
 end;
 
@@ -274,4 +293,3 @@ begin
 end;
 
 end.
-
