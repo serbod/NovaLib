@@ -160,6 +160,7 @@ var
 begin
   Result := False;
   SleepTime := 2;
+  FinalTime := 0;
   while (ATimeout >= 0) do
   begin
     // returns LockCount before increment
@@ -196,6 +197,7 @@ var
 begin
   Result := False;
   SleepTime := 2;
+  FinalTime := 0;
   // try to acquire permissive lock
   while (ATimeout >= 0) do
   begin
@@ -220,6 +222,7 @@ var
 begin
   Result := False;
   SleepTime := 2;
+  FinalTime := 0;
   // set lock to prevent new readers, return LockCount before
   while (ATimeout >= 0) do
   begin

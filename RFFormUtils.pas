@@ -6,13 +6,18 @@ MIT license
 -----------------------------------------------------------------------------}
 unit RFFormUtils;
 
+{$IFDEF FPC}
+  {$MODE Delphi}
+{$ENDIF}
+
 interface
 
 uses
   {$IFDEF FPC}
-  LazUTF8,
+  LCLIntf, LCLType, LMessages, LazUTF8,
   {$ENDIF}
-  Windows, SysUtils, Classes, Messages, Types, Forms,
+  Windows,
+  SysUtils, Classes, Messages, Types, Forms,
   StdCtrls, ComCtrls, Controls, Clipbrd;
 
 // вызов справки
@@ -63,6 +68,11 @@ procedure UpdateLabelCaption(Item: TCustomLabel; Text: string);
 // Установить текст в буфере обмена (с учетом кодировки)
 procedure SetClipboardText(const Text: string);
 function GetClipboardText(): string;
+
+// Копирование содержимого списка в буфер обмена
+// AColSeparator - разделитель колонок (по умолчанию Tab)
+procedure ListViewToClipboard(lv: TListView; AColSeparator: string = #09);
+
 
 implementation
 
@@ -481,6 +491,41 @@ begin
 {$else}
   Result := Clipboard.AsText;
 {$endif}
+end;
+
+procedure ListViewToClipboard(lv: TListView; AColSeparator: string);
+var
+  sl: TStringList;
+  i, ii: Integer;
+  s : string;
+  ListItem: TListItem;
+begin
+  sl := TStringList.Create();
+  try
+    // шапка таблицы
+    s := '';
+    for i := 0 to lv.Columns.Count-1 do
+    begin
+      if i > 0 then
+        s := s + AColSeparator;
+      s := s + lv.Columns[i].Caption;
+    end;
+    sl.Append(s);
+    
+    for i := 0 to lv.Items.Count-1 do
+    begin
+      ListItem := lv.Items[i];
+      s := ListItem.Caption;
+      for ii := 0 to ListItem.SubItems.Count-1 do
+      begin
+        s := s + AColSeparator + ListItem.SubItems[ii];
+      end;
+      sl.Append(s);
+    end;
+    SetClipboardText(sl.Text);
+  finally
+    sl.Free();
+  end;
 end;
 
 end.

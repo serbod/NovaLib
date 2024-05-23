@@ -471,6 +471,7 @@ begin
     else
       Continue;
     Inc(m, 4);
+    if m > 60 then Exit;
   end;
 end;
 
