@@ -129,11 +129,14 @@ procedure _LogDebug(const AMsg: string; AObj: TObject = nil);
 procedure _LogError(const AMsg: string; AObj: TObject = nil);
 procedure _LogWarning(const AMsg: string; AObj: TObject = nil);
 procedure _LogStatus(const AMsg: string);
+{ shortcut to DLogger.OnWaitState(IsWaiting), used for show/hide wait indicator }
 procedure _WaitState(IsWaiting: boolean);
 function LogRecToSyslogStr(const rec: TLogRecord; var ASyslogStr: string): Boolean;
+{ write to log difference (in msecs) from previous call }
 procedure _LogProfiler(const AMsg: string);
 { returns info about current exception }
 function GetExceptionMessage(): string;
+{ write exeption message and call stack to log }
 procedure LogException();
 
 
@@ -212,7 +215,14 @@ begin
   {$endif}
   if not Assigned(LoggerObject) then
     LoggerObject := TDlogger.Create(nil);
-  LoggerObject.SendToSyslog(llDebug, IntToStr(tc-DProfilerLastTime)+' '+AMsg, 0, 'PROF');
+
+  { check for counter wraps around maximum }
+  if tc >= DProfilerLastTime then
+    DProfilerLastTime := tc - DProfilerLastTime
+  else
+    DProfilerLastTime := (tc + ($FFFFFFFF - DProfilerLastTime));
+
+  LoggerObject.SendToSyslog(llDebug, IntToStr(DProfilerLastTime) + ' ' + AMsg, 0, 'PROF');
   DProfilerLastTime := tc;
 end;
 
@@ -389,7 +399,11 @@ begin
   inherited Create();
   FSock := nil;
   FLock := TCriticalSection.Create();
+{$ifdef DEBUG}
   Self.MaxLogLevel := llDebug;
+{$else}
+  Self.MaxLogLevel := llEmergency;
+{$endif}
   Self.ApplicationName := ExtractFileName(ParamStr(0));
   Self.SyslogServerAddr := '';
   Self.LogFileName := self.ApplicationName+'.log';
