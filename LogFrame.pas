@@ -6,6 +6,10 @@ MIT license
 -----------------------------------------------------------------------------}
 unit LogFrame;
 
+{$IFDEF FPC}
+  {$MODE Delphi}
+{$ENDIF}
+
 interface
 
 uses

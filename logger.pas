@@ -137,7 +137,7 @@ procedure _LogProfiler(const AMsg: string);
 { returns info about current exception }
 function GetExceptionMessage(): string;
 { write exeption message and call stack to log }
-procedure LogException();
+procedure LogException(APrefix: string = '');
 
 
 implementation
@@ -289,7 +289,32 @@ begin
     Result := '';
 end;
 
-procedure LogException();
+{$ifdef FPC}
+procedure LogExceptionFPC(APrefix: string);
+var
+  E: Exception;
+  i: Integer;
+  Frames: PPointer;
+  s: string;
+begin
+  if APrefix <> '' then
+    s := APrefix + ': '
+  else
+    s := '';
+  E := Exception(ExceptObject);
+  if E <> nil then
+  begin
+    s := s + 'Exception(' + E.ClassName + '): ' + E.Message + LineEnding;
+  end;
+  s := s + BackTraceStrFunc(ExceptAddr);
+  Frames := ExceptFrames;
+  for i := 0 to ExceptFrameCount - 1 do
+    s := s + LineEnding + BackTraceStrFunc(Frames[i]);
+  _Log(s, llError);
+end;
+{$endif}
+
+procedure LogException(APrefix: string);
 {$ifdef JCL_DEBUG}
 var
   i: Integer;
@@ -305,7 +330,11 @@ begin
   end;
   ExceptionLogLines.Clear();
   {$else}
-  _Log(GetExceptionMessage(), llError);
+    {$ifdef FPC}
+    LogExceptionFPC(APrefix);
+    {$else}
+    _Log(GetExceptionMessage(), llError);
+    {$endif}
   {$endif}
 end;
 

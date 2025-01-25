@@ -17,9 +17,12 @@ type
     edValue: TEdit;
     procedure btnCancelClick(Sender: TObject);
     procedure btnOKClick(Sender: TObject);
+    procedure edValueChange(Sender: TObject);
+    procedure EdValueKeyPress(Sender: TObject; var Key: Char);
   private
     FAllowedChars: string;
     FMaxLength: Integer;
+    FMaxValue: Int64;
     FHideChars: Boolean;
     FOkPressed: Boolean;
 
@@ -122,6 +125,48 @@ end;
 procedure TFramePinCode.OnShowHandler(Sender: TObject);
 begin
   edValue.SetFocus();
+end;
+
+procedure TFramePinCode.edValueChange(Sender: TObject);
+var
+  nn: Int64;
+  s: string;
+begin
+  nn := StrToInt64Def((Sender as TCustomEdit).Text, -1);
+  if nn > FMaxValue then
+    s := IntToStr(FMaxValue)
+  else if nn < 0 then
+    s := ''
+  else
+    s := IntToStr(nn);
+
+  if (Sender as TCustomEdit).Text <> s then
+    (Sender as TCustomEdit).Text := s;
+end;
+
+procedure TFramePinCode.edValueKeyPress(Sender: TObject; var Key: Char);
+var
+  ed: TCustomEdit;
+  s: string;
+  nn: Int64;
+begin
+  ed := (Sender as TCustomEdit);
+  if Pos(Key, FAllowedChars+#8) > 0 then
+  begin
+    // symbol insert imitation
+    s := ed.Text;
+    if ed.SelLength > 0 then
+      Delete(s, ed.SelStart+1, ed.SelLength);
+    Insert(Key, s, ed.SelStart+1);
+    nn := StrToInt64Def(s, 0);
+    if nn > FMaxValue then
+      Key := #0;
+  end
+  else
+  begin
+    Key := #0;
+    //MessageBeep(MB_OK);
+  end;
 end;
 
 end.
